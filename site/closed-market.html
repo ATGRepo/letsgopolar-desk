@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Closed Market Deals - Let's Go Polar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1d2a; --surface:#ffffff; --ink:#12303f; --muted:#5b7686;
+    --line:#d6e2ea; --accent:#1a6a8e; --accent-ink:#0c3a4f; --chip:#eef4f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef3f6;
+    color:var(--ink);font-family:Inter,system-ui,sans-serif;min-height:100vh}
+
+  /* top menu */
+  header.topbar{position:sticky;top:0;z-index:20;background:rgba(11,29,42,.92);
+    backdrop-filter:blur(6px);border-bottom:1px solid #16303f}
+  .topbar-inner{max-width:1080px;margin:0 auto;display:flex;align-items:center;
+    gap:26px;padding:15px 24px}
+  .brand{display:flex;flex-direction:column;line-height:1.1;margin-right:8px}
+  .brand .eyebrow{font:600 10px Inter;letter-spacing:.16em;text-transform:uppercase;color:#6fb3cf}
+  .brand .name{font:700 17px "Space Grotesk";color:#fff}
+  nav.menu{display:flex;gap:6px;flex-wrap:wrap}
+  nav.menu a{color:#cfe0ea;text-decoration:none;font:500 14px Inter;
+    padding:8px 13px;border-radius:8px}
+  nav.menu a:hover{background:#1b3a4f;color:#fff}
+  nav.menu a.active{background:#fff;color:var(--accent-ink)}
+
+  /* hero */
+  .hero{max-width:1080px;margin:0 auto;padding:40px 24px 8px;color:#eaf3f8}
+  .hero h1{font:700 30px "Space Grotesk";margin:0 0 6px}
+  .hero p{margin:0;color:#a9c6d5;font-size:15px}
+
+  /* cards */
+  main{max-width:1080px;margin:0 auto;padding:26px 24px 60px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:22px;text-decoration:none;color:inherit;display:flex;flex-direction:column;
+    min-height:150px;transition:transform .12s ease,box-shadow .12s ease}
+  .card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(18,48,63,.12)}
+  .card.soon{opacity:.72;pointer-events:none}
+  .card .tag{font:600 10px Inter;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:10px}
+  .card.soon .tag{color:var(--muted)}
+  .card h2{font:600 19px "Space Grotesk";margin:0 0 6px}
+  .card p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.5}
+  .card .go{margin-top:auto;padding-top:14px;font:600 13px Inter;color:var(--accent)}
+  .badge{align-self:flex-start;margin-top:auto;background:var(--chip);color:var(--muted);
+    font:600 11px Inter;padding:4px 9px;border-radius:20px}
+  footer{max-width:1080px;margin:0 auto;padding:0 24px 40px;color:var(--muted);font-size:12px}
+</style>
+<style>
+  .panel{max-width:1080px;margin:0 auto;padding:60px 24px}
+  .panel .box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:44px 34px;text-align:center}
+  .panel .tag{font:600 10px Inter;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .panel h1{font:700 26px "Space Grotesk";margin:12px 0 8px}
+  .panel p{margin:0 auto;max-width:520px;color:var(--muted);font-size:14.5px;line-height:1.6}
+  .panel a.back{display:inline-block;margin-top:22px;font:600 13px Inter;color:var(--accent);text-decoration:none}
+</style>
+<style>
+  /* deals sub-menu bar, sits directly under the main top menu */
+  .dealbar{position:sticky;top:0;z-index:15;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;
+    box-shadow:0 1px 0 rgba(18,48,63,.04)}
+  .dealbar-label{font:600 10px Inter;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .dealbar-tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .deal-tab{border:1px solid var(--line);background:#f4f8fb;color:var(--accent-ink);
+    font:600 13.5px Inter;padding:7px 15px;border-radius:9px;cursor:pointer;transition:background .12s,border-color .12s}
+  .deal-tab:hover{background:#e9f2f7}
+  .deal-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .cmd-upload{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px dashed var(--accent);
+    color:var(--accent);font:600 12.5px Inter;padding:6px 13px;border-radius:9px;background:#fff;white-space:nowrap}
+  .cmd-upload:hover{background:#eef6fa}
+  .cmd-upload.busy{opacity:.6;pointer-events:none}
+  .cmd-msg{font:500 12px Inter;padding:2px 4px}
+  .cmd-msg.ok{color:#2f8b6f}.cmd-msg.err{color:#b4552d}
+  .dealbar-note{margin-left:auto;font:500 12px Inter;color:#a06a3a;background:#fdf6e6;
+    border:1px solid #f0dcae;padding:4px 10px;border-radius:20px}
+  .deal-frame-wrap{position:relative;background:#eef3f6}
+  .deal-frame{display:block;width:100%;height:calc(100vh - 58px - 55px);border:0;background:#eef3f6}
+  @media (max-width:720px){
+    .dealbar-note{display:none}
+    .deal-frame{height:calc(100vh - 58px - 96px)}
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="eyebrow">Let's Go Polar</span>
+        <span class="name">Sales Tools</span>
+      </div>
+      <nav class="menu"><a href="index.html">Home</a><a href="dates-and-rates.html">Dates and Rates</a><a href="closed-market.html" class="active">Closed Market Deals</a><a href="api-integrations.html">API Integrations</a></nav>
+    </div>
+  </header>
+  <nav class="dealbar" id="dealbar" aria-label="Closed market deals">
+    <span class="dealbar-label">Deals</span>
+    <div class="dealbar-tabs" id="dealTabs">
+      <button class="deal-tab active" data-deal="flash">Swan Flash</button>
+      <button class="deal-tab" data-deal="solo">Swan Solo Cruise Plus</button>
+      <button class="deal-tab" data-deal="quarkcmd">Quark CMD</button>
+      <button class="deal-tab" data-deal="swanantarctica">Swan Antarctica CMD</button>
+    </div>
+    <label class="cmd-upload" id="cmdUpload" title="Upload Quark's monthly Closed Market pricing grid (.xlsx)">
+      <span id="cmdUploadLabel">Upload Quark CMD</span>
+      <input type="file" id="cmdInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    </label>
+    <span class="cmd-msg" id="cmdMsg"></span>
+    <span class="dealbar-note">Share with clients by email or WhatsApp only &mdash; never post publicly (Facebook, marketing emails, etc.)</span>
+  </nav>
+  <div class="deal-frame-wrap">
+    <iframe id="dealFrame" class="deal-frame" title="Deal rates" src="dates-and-rates.html?deals=flash&amp;embed=1"></iframe>
+  </div>
+  <script>
+    (function(){
+      const tabs=document.getElementById("dealTabs");
+      const frame=document.getElementById("dealFrame");
+      // Deep-link support: ?deal=solo selects that tab on load.
+      const wanted=new URLSearchParams(location.search).get("deal");
+      function select(deal){
+        [...tabs.querySelectorAll(".deal-tab")].forEach(b=>b.classList.toggle("active", b.getAttribute("data-deal")===deal));
+        frame.src="dates-and-rates.html?deals="+encodeURIComponent(deal)+"&embed=1";
+        // reflect in URL without reloading
+        const u=new URL(location.href); u.searchParams.set("deal",deal); history.replaceState(null,"",u);
+      }
+      tabs.addEventListener("click", e=>{const b=e.target.closest(".deal-tab"); if(!b) return; select(b.getAttribute("data-deal"));});
+      if(wanted && [...tabs.querySelectorAll(".deal-tab")].some(b=>b.getAttribute("data-deal")===wanted)) select(wanted);
+
+      // ---- Quark CMD monthly spreadsheet upload (raw .xlsx -> server-side parse) ----
+      const cmdInput=document.getElementById("cmdInput");
+      const cmdWrap=document.getElementById("cmdUpload");
+      const cmdMsg=document.getElementById("cmdMsg");
+      const cmdLabel=document.getElementById("cmdUploadLabel");
+      function setMsg(t,cls){ cmdMsg.textContent=t||""; cmdMsg.className="cmd-msg"+(cls?(" "+cls):""); }
+      cmdInput.addEventListener("change", async e=>{
+        const f=e.target.files&&e.target.files[0];
+        if(!f) return;
+        cmdWrap.classList.add("busy"); cmdLabel.textContent="Uploading…"; setMsg("");
+        try{
+          const fd=new FormData(); fd.append("file", f, f.name);
+          const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),45000);
+          let r;
+          try{ r=await fetch("/upload-quark-cmd.php",{method:"POST",body:fd,cache:"no-store",signal:ctrl.signal}); }
+          catch(err){ clearTimeout(timer); throw new Error(err.name==="AbortError"?"timed out after 45s":("network error ("+(err.message||"failed")+")")); }
+          clearTimeout(timer);
+          if(r.status===404) throw new Error("upload-quark-cmd.php not found — deploy it to the desk folder.");
+          if(!r.ok) throw new Error("server returned HTTP "+r.status);
+          const text=await r.text(); let res;
+          try{ res=JSON.parse(text); }catch(_){ throw new Error("unexpected response: "+text.slice(0,60).replace(/\s+/g," ")); }
+          if(!res.ok) throw new Error(res.error||"upload rejected");
+          setMsg(`Saved ${res.departures} departures (${res.usd_rows} USD rows).`, "ok");
+          // Rebuild the feed, then show the Quark CMD tab with fresh data.
+          try{ await fetch("/rate-data.php?nocache=1",{cache:"no-store"}); }catch(_){}
+          [...tabs.querySelectorAll(".deal-tab")].forEach(b=>b.classList.toggle("active", b.getAttribute("data-deal")==="quarkcmd"));
+          const u=new URL(location.href); u.searchParams.set("deal","quarkcmd"); history.replaceState(null,"",u);
+          frame.src="dates-and-rates.html?deals=quarkcmd&embed=1&ts="+Date.now();
+        }catch(err){
+          setMsg("Upload failed: "+(err.message||"unknown error"), "err");
+        }finally{
+          cmdWrap.classList.remove("busy"); cmdLabel.textContent="Upload Quark CMD"; cmdInput.value="";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

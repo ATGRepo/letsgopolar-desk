@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Let's Go Polar - Sales Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1d2a; --surface:#ffffff; --ink:#12303f; --muted:#5b7686;
+    --line:#d6e2ea; --accent:#1a6a8e; --accent-ink:#0c3a4f; --chip:#eef4f8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0b1d2a 0,#123145 340px,#eef3f6 340px,#eef3f6 100%);
+    color:var(--ink);font-family:Inter,system-ui,sans-serif;min-height:100vh}
+
+  /* top menu */
+  header.topbar{position:sticky;top:0;z-index:20;background:rgba(11,29,42,.92);
+    backdrop-filter:blur(6px);border-bottom:1px solid #16303f}
+  .topbar-inner{max-width:1080px;margin:0 auto;display:flex;align-items:center;
+    gap:26px;padding:15px 24px}
+  .brand{display:flex;flex-direction:column;line-height:1.1;margin-right:8px}
+  .brand .eyebrow{font:600 10px Inter;letter-spacing:.16em;text-transform:uppercase;color:#6fb3cf}
+  .brand .name{font:700 17px "Space Grotesk";color:#fff}
+  nav.menu{display:flex;gap:6px;flex-wrap:wrap}
+  nav.menu a{color:#cfe0ea;text-decoration:none;font:500 14px Inter;
+    padding:8px 13px;border-radius:8px}
+  nav.menu a:hover{background:#1b3a4f;color:#fff}
+  nav.menu a.active{background:#fff;color:var(--accent-ink)}
+
+  /* hero */
+  .hero{max-width:1080px;margin:0 auto;padding:40px 24px 8px;color:#eaf3f8}
+  .hero h1{font:700 30px "Space Grotesk";margin:0 0 6px}
+  .hero p{margin:0;color:#a9c6d5;font-size:15px}
+
+  /* cards */
+  main{max-width:1080px;margin:0 auto;padding:26px 24px 60px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:22px;text-decoration:none;color:inherit;display:flex;flex-direction:column;
+    min-height:150px;transition:transform .12s ease,box-shadow .12s ease}
+  .card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(18,48,63,.12)}
+  .card.soon{opacity:.72;pointer-events:none}
+  .card .tag{font:600 10px Inter;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:10px}
+  .card.soon .tag{color:var(--muted)}
+  .card h2{font:600 19px "Space Grotesk";margin:0 0 6px}
+  .card p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.5}
+  .card .go{margin-top:auto;padding-top:14px;font:600 13px Inter;color:var(--accent)}
+  .badge{align-self:flex-start;margin-top:auto;background:var(--chip);color:var(--muted);
+    font:600 11px Inter;padding:4px 9px;border-radius:20px}
+  footer{max-width:1080px;margin:0 auto;padding:0 24px 40px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="eyebrow">Let's Go Polar</span>
+        <span class="name">Sales Tools</span>
+      </div>
+      <nav class="menu">
+        <a href="index.html" class="active">Home</a>
+        <a href="dates-and-rates.html">Dates and Rates</a>
+        <a href="closed-market.html">Closed Market Deals</a>
+        <a href="api-integrations.html">API Integrations</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1>Sales Tools</h1>
+    <p>Everything the team needs in one place. Pick a tool to get started.</p>
+  </section>
+
+  <main>
+    <div class="grid">
+      <a class="card" href="dates-and-rates.html">
+        <span class="tag">Live</span>
+        <h2>Dates and Rates</h2>
+        <p>Search and compare every expedition sailing, cabin pricing, availability, and build a shortlist for clients.</p>
+        <span class="go">Open tool &rarr;</span>
+      </a>
+
+      <a class="card" href="closed-market.html">
+        <span class="tag">Live</span>
+        <h2>Closed Market Deals</h2>
+        <p>Confidential and negotiated rates for the team, including Swan Hellenic Flash and Solo Cruise Plus deals.</p>
+        <span class="go">Open tool &rarr;</span>
+      </a>
+
+      <a class="card" href="api-integrations.html">
+        <span class="tag">Live</span>
+        <h2>API Integrations</h2>
+        <p>Live operator feeds and connected data sources. Oceanwide and Quark are wired into Dates and Rates; Swan Hellenic is planned.</p>
+        <span class="go">Open tool &rarr;</span>
+      </a>
+    </div>
+  </main>
+
+  <footer>
+    Internal use only. Fares are current as shown and subject to change and availability.
+  </footer>
+</body>
+</html>

@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Let&rsquo;s Go Polar Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f6;--surface:#ffffff;--ink:#0f2438;--ink-soft:#3f5468;--muted:#8496a6;
+  --line:#dce4ec;--line-soft:#eef2f6;--ice:#1d6e8c;--ice-deep:#155568;--ice-wash:#e4eef2;
+  --arctic:#2f8b6f;--arctic-wash:#e3f0ea;--deal:#e0592f;--deal-wash:#fbe8e0;--soldout:#b3bec7;
+  --sidebar:236px;--stick:118px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Inter",system-ui,sans-serif;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+button{font-family:inherit;cursor:pointer}
+a{color:var(--ice)}
+
+/* ---------- sidebar ---------- */
+aside.rail{position:fixed;left:0;top:var(--topbar);bottom:0;width:var(--sidebar);z-index:50;
+  background:linear-gradient(180deg,#0f2438 0%,#122d40 100%);color:#eaf2f7;
+  display:flex;flex-direction:column;border-right:1px solid #0c1c2c}
+.rail-brand{padding:22px 20px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.rail-eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.24em;
+  text-transform:uppercase;color:#7fb0c4;margin:0 0 7px}
+.rail-title{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:20px;line-height:1.05;margin:0}
+.rail-updated{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.03em;color:#7fb0c4;margin-top:9px}
+.rail-nav{flex:1;overflow-y:auto;padding:14px 12px}
+.rail-label{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:#6f97a9;margin:2px 8px 9px}
+.op-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  border:none;background:none;color:#c6d7e0;text-align:left;padding:9px 10px;border-radius:8px;
+  font-size:13.5px;font-weight:500;margin-bottom:2px;line-height:1.25}
+.op-btn:hover{background:rgba(255,255,255,.06);color:#eaf2f7}
+.op-btn.active{background:var(--ice);color:#fff}
+.op-btn.active .op-n{color:#dff0f6}
+.op-btn .op-n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#7fb0c4;font-weight:500}
+.op-btn.all{border-bottom:1px solid rgba(255,255,255,.08);border-radius:8px 8px 0 0;margin-bottom:8px;padding-bottom:12px}
+.rail-foot{padding:14px 20px;border-top:1px solid rgba(255,255,255,.08);
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:#6f97a9;line-height:1.6}
+
+/* ---------- main ---------- */
+.main{margin-left:var(--sidebar);padding-top:var(--stick)}
+.toolbar{position:fixed;top:var(--topbar);left:var(--sidebar);right:0;z-index:30;
+  background:rgba(238,242,246,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+  padding:12px 22px}
+.tb-row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.tb-row.secondary{margin-top:9px}
+.search{position:relative;flex:1 1 230px;min-width:180px}
+.search input{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:9px;
+  padding:9px 12px 9px 34px;font-size:14px;color:var(--ink)}
+.search input:focus{outline:2px solid var(--ice);border-color:var(--ice)}
+.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.field{position:relative}
+select{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:9px;
+  padding:9px 28px 9px 11px;font-size:13px;color:var(--ink);cursor:pointer;max-width:200px}
+select:focus{outline:2px solid var(--ice);border-color:var(--ice)}
+.field::after{content:"";position:absolute;right:11px;top:50%;width:7px;height:7px;
+  border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);
+  transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.ms{position:relative}
+.ms-btn{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:9px;
+  padding:9px 28px 9px 11px;font-size:13px;color:var(--ink);cursor:pointer;max-width:200px;min-width:132px;
+  text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ms .ms-btn{position:static}
+.ms::after{content:"";position:absolute;right:11px;top:19px;width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);pointer-events:none}
+.ms-btn.on{border-color:var(--ice);color:var(--ice-deep);font-weight:600}
+.ms-panel{position:absolute;top:calc(100% + 4px);left:0;z-index:60;background:var(--surface);
+  border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 30px rgba(15,36,56,.18);padding:6px;min-width:214px;max-height:340px;overflow-y:auto}
+.ms-opt{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:6px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap}
+.ms-opt:hover{background:var(--ice-wash)}
+.ms-opt input{accent-color:var(--ice);width:15px;height:15px;cursor:pointer;flex:none}
+.ms-actions{display:flex;justify-content:space-between;padding:7px 6px 2px;border-top:1px solid var(--line-soft);margin-top:5px}
+.ms-actions button{border:none;background:none;color:var(--ice);font-size:12px;font-weight:600;cursor:pointer;padding:4px 6px}
+.ms-actions button:hover{text-decoration:underline}
+.btn-reset{border:1px solid var(--line);background:var(--surface);border-radius:9px;
+  padding:9px 13px;font-size:13px;color:var(--ink-soft);font-weight:500}
+.btn-reset:hover{border-color:var(--ice);color:var(--ice)}
+.price-cap{display:flex;align-items:center;gap:9px;flex:0 1 400px;min-width:260px;
+  border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:7px 13px}
+.price-cap label{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.price-cap input[type=range]{flex:1;accent-color:var(--ice)}
+.price-cap .val{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;color:var(--ice-deep);white-space:nowrap;min-width:64px;text-align:right}
+.tb-meta{display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap}
+.count-note{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);letter-spacing:.03em}
+.legend{font-size:11.5px;color:var(--muted)}
+.legend b{color:var(--ice-deep);font-weight:600}
+.legend s{color:var(--muted)}
+.tb-spacer{margin-left:auto}
+.tool-btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:500;color:var(--ink-soft)}
+.tool-btn:hover{border-color:var(--ice);color:var(--ice)}
+.mob-op{display:none}
+
+.sheet{padding:22px 22px 90px}
+
+/* ---------- ship tables ---------- */
+.ship{width:max-content;min-width:100%;margin:0 0 30px;border-collapse:separate;border-spacing:0}
+.ship thead th{position:sticky;top:var(--stick);z-index:5;background:var(--bg)}
+.ship .ship-row th{
+  top:var(--stick);z-index:7;text-align:left;padding:0;border:none;background:transparent}
+.ship-bar{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+  background:var(--ink);color:#eaf2f7;border-radius:10px 10px 0 0;padding:11px 16px;margin-top:2px}
+.ship-bar .snm{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:16px}
+.ship-bar .sop{font-size:12.5px;color:#9fc0cf}
+.ship-bar .scount{font-family:"IBM Plex Mono",monospace;font-size:11px;color:#7fb0c4;margin-left:auto;letter-spacing:.04em}
+.ship-bar .stag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;letter-spacing:.02em}
+.ship-bar .stag.antarctic{background:rgba(93,180,209,.22);color:#bfe2ef}
+.ship-bar .stag.arctic{background:rgba(90,200,160,.2);color:#bde9d7}
+
+.ship .col-row th{top:calc(var(--stick) + 44px);z-index:5;
+  font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--muted);font-weight:500;text-align:center;padding:9px 5px;vertical-align:bottom;
+  background:#e7edf2;border-bottom:1px solid var(--line);white-space:normal;line-height:1.2;min-width:64px}
+.ship .col-row th.c-date{text-align:left;left:0;z-index:8;width:116px;min-width:116px;max-width:116px}
+.ship .col-row th.c-itin{text-align:left;left:116px;z-index:8;width:222px;min-width:222px;max-width:222px}
+
+/* frozen columns */
+.c-date{position:sticky;left:0;background:var(--surface);z-index:3}
+.c-itin{position:sticky;left:116px;background:var(--surface);z-index:3;border-right:1px solid var(--line)}
+tbody .c-itin{box-shadow:1px 0 0 var(--line)}
+
+.ship tbody td{padding:8px 5px;border-bottom:1px solid var(--line-soft);background:var(--surface);
+  text-align:center;vertical-align:middle}
+.ship tbody td.c-date,.ship tbody td.c-itin{text-align:left;vertical-align:top;padding:10px 12px}
+.ship tbody tr:nth-child(even) td{background:#eef4f8}
+.ship tbody tr:hover td{background:#e0edf3}
+.ship tbody tr:last-child td{border-bottom:none}
+.ship tbody tr:last-child td.c-date{border-radius:0 0 0 10px}
+
+.c-date .dt{font-family:"IBM Plex Mono",monospace;line-height:1.3;display:flex;flex-direction:column}
+.c-date .dt .d1{font-size:12px;font-weight:600;color:var(--ink)}
+.c-date .dt .d2{color:var(--muted);font-weight:400;font-size:11px;margin-top:1px}
+.itin{display:flex;flex-direction:column;gap:3px;text-align:left}
+.itin .nm{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:13.5px;color:var(--ink);line-height:1.2}
+.itin .sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:1px}
+.rdot{width:7px;height:7px;border-radius:50%;flex:none}
+.rdot.antarctic{background:var(--ice)}.rdot.arctic{background:var(--arctic)}
+.itin .dest{font-size:11.5px;color:var(--ink-soft)}
+.itin .route{font-size:11px;color:var(--muted)}
+.itin .lnks{display:flex;gap:6px;margin-top:5px}
+.itin .lnks a{font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;letter-spacing:.04em;
+  text-decoration:none;border:1px solid var(--line);border-radius:5px;padding:2px 8px;color:var(--ink-soft);background:var(--surface)}
+.itin .lnks a:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+.copybtns{display:flex;gap:6px;margin-top:8px}
+.iconbtn{width:28px;height:25px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--line);background:var(--surface);border-radius:6px;cursor:pointer;padding:0}
+.iconbtn:hover{border-color:var(--ice);background:var(--ice-wash)}
+.iconbtn.ok{border-color:var(--arctic);background:var(--arctic-wash)}
+.iconbtn svg{display:block}
+
+.price .d{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:600;color:var(--ice-deep);line-height:1.15}
+.price .f{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);text-decoration:line-through;margin-top:1px}
+.price.full-only .d{color:var(--ink)}
+.price.out{color:var(--soldout);font-family:"IBM Plex Mono",monospace;font-size:13px}
+.price.na{color:var(--soldout);opacity:.4;font-family:"IBM Plex Mono",monospace}
+
+.empty{padding:70px 20px;text-align:center;color:var(--muted)}
+.empty h3{font-family:"Space Grotesk",sans-serif;color:var(--ink-soft);font-size:18px;margin:0 0 6px}
+.empty button{margin-top:14px;border:1px solid var(--ice);color:var(--ice);background:none;border-radius:8px;padding:8px 16px;font-weight:600}
+
+@media(max-width:900px){
+  :root{--sidebar:0px}
+  aside.rail{display:none}
+  .toolbar{position:sticky;left:0;right:auto;width:100%}
+  .main{margin-left:0;padding-top:0}
+  .mob-op{display:block}
+  .ship .col-row th.c-date,.ship .col-row th.c-itin,.c-date,.c-itin{position:static;box-shadow:none;border-right:none}
+  select{max-width:none;flex:1 1 130px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.print-only{display:none}
+/* ---- view toggle buttons ---- */
+.viewtog{display:inline-flex;gap:2px;border:1px solid var(--line);border-radius:8px;padding:2px;background:var(--surface)}
+.vbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;border:none;background:none;border-radius:6px;color:var(--ink-soft);cursor:pointer}
+.vbtn:hover{background:#eef4f8}
+.vbtn[aria-pressed="true"]{background:var(--ice-deep);color:#fff}
+/* ---- card view ---- */
+.vgroup{margin:0 0 18px}
+.vgroup-h{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:14px;color:var(--ink-soft);margin:6px 2px 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.cardgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:1400px){.cardgrid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1040px){.cardgrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:680px){.cardgrid{grid-template-columns:1fr}}
+.cardv{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:14px 14px 12px;display:flex;flex-direction:column;gap:6px}
+.cardv-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.cardv-date .d1{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px;color:var(--ink)}
+.cardv-date .d2{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);display:block;margin-top:1px}
+.cardv-nm{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:15px;color:var(--ink);line-height:1.2;margin-top:2px}
+.cardv-sub{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft)}
+.cardv-route{font-size:11.5px;color:var(--muted)}
+.cardv-foot{display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
+.cardv-from{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:13px;color:var(--ice-deep)}
+.disc-badge{display:inline-block;margin-left:6px;font-family:Inter,system-ui,sans-serif;font-weight:700;font-size:11px;color:#fff;background:var(--deal);padding:2px 7px;border-radius:20px;vertical-align:middle}
+.cardv-actions{display:flex;align-items:center;gap:8px}
+/* ---- list view ---- */
+.listwrap{display:flex;flex-direction:column;gap:6px}
+.listv{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.listv-main{display:flex;align-items:center;gap:14px;padding:10px 12px}
+.listv-date{min-width:120px}
+.listv-date .d1{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:12.5px;color:var(--ink)}
+.listv-date .d2{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);display:block}
+.listv-mid{flex:1;min-width:0}
+.listv-nm{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:13.5px;color:var(--ink);display:flex;align-items:center;gap:6px}
+.listv-meta{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.listv-from{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:12.5px;color:var(--ice-deep);white-space:nowrap}
+.listv-act{display:flex;align-items:center;gap:8px}
+/* ---- shared: LGP link chip, toggle arrow, cabin dropdown ---- */
+.cardv .lgp,.listv .lgp{font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;letter-spacing:.04em;color:var(--ice-deep);border:1px solid var(--line);border-radius:6px;padding:4px 7px;text-decoration:none}
+.cab-toggle{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink-soft);cursor:pointer;transition:transform .15s}
+.cab-toggle.open{transform:rotate(180deg)}
+.cab-wrap{border-top:1px solid var(--line);padding:8px 12px 12px}
+.cab-list{display:flex;flex-direction:column;gap:2px}
+.cab-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:4px 0;border-bottom:1px solid #f0f4f7}
+.cab-row:last-child{border-bottom:none}
+.cab-row b{font-family:"IBM Plex Mono",monospace;color:var(--ice-deep)}
+.cab-row.out{color:var(--soldout)}
+@media print{
+  @page{size:A4 landscape;margin:9mm}
+  body.brochure-mode .rail,body.brochure-mode .toolbar,body.brochure-mode .main,body.brochure-mode #printHead,body.brochure-mode .topbar{display:none!important}
+  body.brochure-mode #brochure{display:block!important}
+  aside.rail,.toolbar{display:none!important}
+  .main{margin:0!important;padding:0!important}
+  .sheet{padding:0!important}
+  body{background:#fff;font-size:9px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .print-only{display:block;margin:0 0 12px}
+  #printHead .ph-title{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:17px;color:#0f2438}
+  #printHead .ph-sub{font-size:10px;color:#155568;margin-top:3px}
+  #printHead .ph-date{font-size:9px;color:#8496a6;margin-top:2px}
+  .ship{width:100%!important;min-width:0!important;margin:0 0 16px;page-break-after:auto;break-after:auto}
+  .ship thead{display:table-header-group}
+  .ship thead th,.ship .col-row th,.ship .ship-row th,.c-date,.c-itin,.ship tbody .c-itin{position:static!important;box-shadow:none!important}
+  .ship-bar{background:#0f2438!important;color:#fff!important;border-radius:0;padding:6px 10px;margin-top:0}
+  .ship-bar .sop,.ship-bar .scount{color:#cfe0e7!important}
+  .ship .col-row th{background:#e7edf2!important;padding:5px 5px;min-width:0;font-size:8px}
+  .ship tbody td{padding:4px 5px;background:#fff!important;text-align:center}
+  .ship tbody td.c-date,.ship tbody td.c-itin{text-align:left}
+  .ship tbody tr:nth-child(even) td{background:#eef4f8!important}
+  .ship tbody tr{break-inside:avoid;page-break-inside:avoid}
+  .itin .lnks{display:none}.itin .nm{font-size:9px}.c-date .dt{font-size:9px}.copybtns{display:none!important}
+  .price .d{font-size:9px}.price .f{font-size:7.5px}
+  .c-itin{border-right:1px solid var(--line)!important}
+}
+#brochure{display:none}
+@media print{
+  body.brochure-mode{background:#fff;padding-top:0}
+  .b-page{font-family:"Inter",Arial,sans-serif;color:#16303f;font-size:12px;line-height:1.5;max-width:100%;overflow-wrap:break-word}
+  .b-top{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #16303f;padding-bottom:8px}
+  .b-brand{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:18px;letter-spacing:.01em}
+  .b-eyebrow{font-family:"IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.14em;font-size:9px;color:#5c7d8c}
+  .b-title{font-family:"Space Grotesk",sans-serif;font-size:24px;margin:16px 0 6px;line-height:1.1}
+  .b-meta{display:flex;gap:12px;align-items:center;font-size:12px;color:#4a6b7a;margin-bottom:16px}
+  .b-tag{font-family:"IBM Plex Mono",monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#fff;background:#2f7d94;border-radius:4px;padding:2px 7px}
+  .b-tag.arctic{background:#c05a2a}
+  .b-facts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 18px;background:#f2f7fa;border:1px solid #dbe7ee;border-radius:8px;padding:14px 16px;margin-bottom:18px}
+  .b-facts label{display:block;font-family:"IBM Plex Mono",monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:.08em;color:#6b8a99;margin-bottom:2px}
+  .b-facts b{font-size:12.5px;font-weight:600}
+  .b-block{margin-bottom:16px;break-inside:avoid}
+  .b-block h3{font-family:"Space Grotesk",sans-serif;font-size:13px;margin:0 0 8px;color:#16303f}
+  .b-tbl{width:100%;border-collapse:collapse;font-size:11.5px}
+  .b-tbl th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:.06em;color:#6b8a99;border-bottom:1px solid #cddbe4;padding:5px 8px}
+  .b-tbl td{padding:5px 8px;border-bottom:1px solid #edf3f6;font-family:"IBM Plex Mono",monospace}
+  .b-tbl td:first-child{font-family:"Inter",Arial,sans-serif}
+  .b-was{color:#93a7b2;text-decoration:line-through}
+  .b-now{font-weight:700;color:#124a5c}
+  .b-sv{color:#2f7d5b;font-size:10px}
+  .b-out td{color:#b23b3b}
+  .b-list{margin:0;padding-left:18px}.b-list li{margin:2px 0;font-size:11.5px}
+  .b-callout{background:#eef4f8;border:1px dashed #b9d0dc;border-radius:8px;padding:12px 14px}
+  .b-callout p{margin:0}.b-callout a{color:#124a5c}
+  .b-foot{border-top:1px solid #cddbe4;padding-top:10px;margin-top:8px;font-size:11px;color:#3d5b69}
+  .b-note{font-size:9.5px;color:#7d95a2}
+}
+  :root{--topbar:46px}
+  .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar);z-index:60;
+    background:#0b1d2a;border-bottom:1px solid #16303f;display:flex;align-items:center;
+    gap:20px;padding:0 20px}
+  .topbar .tb-brand{font:700 13px "Space Grotesk",Inter,system-ui,sans-serif;color:#fff;letter-spacing:.02em}
+  .topbar nav{display:flex;gap:4px;flex-wrap:wrap}
+  .topbar nav a{color:#cfe0ea;text-decoration:none;font:500 13px Inter,system-ui,sans-serif;
+    padding:6px 11px;border-radius:7px}
+  .topbar nav a:hover{background:#1b3a4f;color:#fff}
+  .topbar nav a.active{background:#fff;color:#0c3a4f;font-weight:600}
+  body{padding-top:var(--topbar)}
+  .b-hero-img{display:block;width:100%;max-width:100%;height:210px;object-fit:cover;border-radius:10px;margin:0 0 4px}
+  .b-about .b-desc{font-size:12.5px;line-height:1.55;margin:0 0 10px}
+  .b-gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .b-gcell{display:block;width:100%;height:120px;object-fit:cover;border-radius:8px}
+  .b-map-wrap{border:1px solid #d6e2ea;border-radius:10px;overflow:hidden}
+  .b-map-img{display:block;width:100%;max-width:100%;max-height:360px;object-fit:contain;background:#eef4f8}
+  .b-map-cap{font-size:12px;color:#5b7686;padding:8px 12px;background:#eef4f8}
+  .b-ship-spec{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#d6e2ea;border:1px solid #d6e2ea;border-radius:8px;overflow:hidden;margin-top:10px}
+  .b-ship-spec>div{background:#fff;padding:10px 12px}
+  .b-ship-spec label{display:block;font:600 9px Inter;letter-spacing:.1em;text-transform:uppercase;color:#5b7686;margin-bottom:3px}
+  .b-ship-spec b{font:600 13px "IBM Plex Mono",monospace}
+  .b-incl-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .b-incl-col h4{margin:0 0 6px;font:600 12px "Space Grotesk",Inter,system-ui,sans-serif;color:#0c3a4f;text-transform:uppercase;letter-spacing:.06em}
+  .b-incl .b-list{margin:0;padding-left:16px}
+  .b-incl .b-list li{margin:2px 0;font-size:12px;line-height:1.4}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span class="tb-brand">Let's Go Polar</span>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="dates-and-rates.html" class="active">Dates and Rates</a>
+    <a href="closed-market.html">Closed Market Deals</a>
+    <a href="api-integrations.html">API Integrations</a>
+  </nav>
+</header>
+<aside class="rail">
+  <div class="rail-brand">
+    <p class="rail-eyebrow">Dates and rates</p>
+    <h1 class="rail-title">Let&rsquo;s Go Polar<br>Dashboard</h1>
+    <div class="rail-updated" id="railUpdated"></div>
+  </div>
+  <nav class="rail-nav" id="opNav"><div class="rail-label">Operators</div></nav>
+  <div class="rail-foot" id="railFoot"></div>
+</aside>
+
+<div class="main">
+  <div class="toolbar">
+    <div class="tb-row">
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="q" type="search" placeholder="Search itinerary, ship, destination, or port" autocomplete="off">
+      </div>
+      <div class="field mob-op"><select id="fOpMob"><option value="">All operators</option></select></div>
+      <div class="field"><select id="fRegion"><option value="">All regions</option><option>Arctic</option><option>Antarctic</option></select></div>
+      <div class="field ms" id="msItin"><button type="button" class="ms-btn" id="msItinBtn" aria-haspopup="listbox" aria-expanded="false">All itineraries</button><div class="ms-panel" id="msItinPanel" hidden></div></div>
+      <div class="field"><select id="fSeason"><option value="">All seasons</option></select></div>
+      <div class="field ms" id="msMonth"><button type="button" class="ms-btn" id="msMonthBtn" aria-haspopup="listbox" aria-expanded="false">Any month</button><div class="ms-panel" id="msMonthPanel" hidden></div></div>
+      <div class="field"><select id="fShip"><option value="">All ships</option></select></div>
+      <div class="field"><select id="fDur"><option value="">Any length</option><option value="s">Up to 11 days</option><option value="m">12 to 15 days</option><option value="l">16 days or more</option></select></div>
+      <div class="field"><select id="fAvail"><option value="">All availability</option><option value="open">Has open cabins</option></select></div>
+      <button class="btn-reset" id="reset">Clear</button>
+    </div>
+    <div class="tb-row secondary">
+      <div class="price-cap"><label>Max from</label><input id="fPrice" type="range" min="0" max="0" step="500"><span class="val mono" id="priceVal"></span></div>
+      <div class="field"><select id="sort">
+        <option value="date">Sort: departure date</option>
+        <option value="plow">Sort: from-price low to high</option>
+        <option value="phigh">Sort: from-price high to low</option>
+        <option value="dur">Sort: longest first</option></select></div>
+    </div>
+    <div class="tb-meta">
+      <span class="count-note" id="countNote"></span>
+      <span class="legend"><b>Net fare</b> shown, <s>full fare</s> struck through. Prices per person.</span>
+      <div class="tb-spacer" style="display:flex;gap:8px">
+        <div class="viewtog" role="group" aria-label="View">
+          <button class="vbtn" id="viewCard" title="Card view" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+          <button class="vbtn" id="viewList" title="List view" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="4" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none"/><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/></svg></button>
+        </div>
+        <button class="tool-btn" id="pdfBtn">Export PDF</button>
+        <button class="tool-btn" id="docBtn">Export Doc</button>
+        <button class="tool-btn" id="exportBtn">Export view (CSV)</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="printHead" class="print-only"></div>
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<div id="brochure"></div>
+<script>
+let TRIPS = [];
+let source = [];
+let byId = {};
+const fmt = n => n==null ? "" : "$"+n.toLocaleString("en-US");
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+let UPDATED="";  // set from endpoint payload.updated
+function dtop(iso){if(!iso)return"";const[y,m,d]=iso.split("-").map(Number);return `${d} ${MON[m-1]} ${y}`;}
+function dret(iso){if(!iso)return"";const[y,m,d]=iso.split("-").map(Number);return `to ${d} ${MON[m-1]}`;}
+function dend(iso){if(!iso)return"";const[y,m,d]=iso.split("-").map(Number);return `${d} ${MON[m-1]}`;}
+function esc(s){return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+const ITIN_MAP={"classic":"Classic Antarctica","classic antarctica":"Classic Antarctica","heroic south":"Classic Antarctica","spirit of terra nova":"Classic Antarctica","circle":"Circle Crossing","polar circle quest":"Circle Crossing"};
+function itinToks(v){return (v||"").split(/[,\n]/).map(x=>x.trim()).filter(Boolean);}
+function itinCat(tok){return ITIN_MAP[tok.trim().toLowerCase()]||tok.trim();}
+function seasonKey(t){
+  if(!t.start)return "";
+  if(t.region==="Arctic")return "Arctic|"+t.start.slice(0,4);
+  const p=t.start.split("-").map(Number);const sy=p[1]>=9?p[0]:p[0]-1;
+  return "Antarctic|"+sy;
+}
+function keyLabelShort(key){const a=key.split("|");const y=Number(a[1]);
+  return a[0]==="Arctic"?String(y):(String(y).slice(-2)+"/"+String(y+1).slice(-2));}
+function keyLabelFull(key){const a=key.split("|");return (a[0]==="Arctic"?"Arctic ":"Antarctica ")+keyLabelShort(key);}
+const MONNAME=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function tripMonth(t){return t.start?Number(t.start.split("-")[1]):0;}
+
+let OPS=[];
+let OPCOUNT={};
+
+const state={q:"",op:"",ship:"",itins:[],region:"",season:"",months:[],dur:"",avail:"",price:0,sort:"date",view:"table"};
+
+function shipsFor(op){return [...new Set(source.filter(t=>!op||t.operator===op).map(t=>t.ship).filter(Boolean))].sort();}
+function fillSeasonSelect(){
+  const sel=document.getElementById("fSeason");
+  const pool=source.filter(t=>!state.region||t.region===state.region);
+  const arc=[...new Set(pool.filter(t=>t.region==="Arctic").map(seasonKey))].filter(Boolean).sort();
+  const ant=[...new Set(pool.filter(t=>t.region==="Antarctic").map(seasonKey))].filter(Boolean).sort();
+  let html='<option value="">All seasons</option>';
+  if(state.region==="Arctic"){html+=arc.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("");}
+  else if(state.region==="Antarctic"){html+=ant.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("");}
+  else{
+    if(arc.length)html+=`<optgroup label="Arctic">`+arc.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("")+`</optgroup>`;
+    if(ant.length)html+=`<optgroup label="Antarctica">`+ant.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("")+`</optgroup>`;
+  }
+  sel.innerHTML=html;
+  const vals=[...sel.querySelectorAll("option")].map(o=>o.value);
+  if(!vals.includes(state.season))state.season="";
+  sel.value=state.season;
+}
+function fillShipSelect(){
+  const sel=document.getElementById("fShip");const ships=shipsFor(state.op);
+  sel.innerHTML='<option value="">All ships</option>'+ships.map(s=>`<option>${esc(s)}</option>`).join("");
+  if(state.ship&&!ships.includes(state.ship))state.ship="";
+  sel.value=state.ship;
+}
+function buildNav(){
+  const nav=document.getElementById("opNav");
+  let h='<div class="rail-label">Operators</div>';
+  h+=`<button class="op-btn all ${state.op===''?'active':''}" data-op=""><span>All operators</span><span class="op-n">${TRIPS.length}</span></button>`;
+  OPS.forEach(o=>{h+=`<button class="op-btn ${state.op===o?'active':''}" data-op="${esc(o)}"><span>${esc(o)}</span><span class="op-n">${OPCOUNT[o]}</span></button>`;});
+  nav.innerHTML=h;
+  const mob=document.getElementById("fOpMob");
+  mob.innerHTML='<option value="">All operators</option>'+OPS.map(o=>`<option${state.op===o?' selected':''}>${esc(o)}</option>`).join("");
+}
+
+const MS_ACTIONS='<div class="ms-actions"><button type="button" data-ms="clear">Clear</button><button type="button" data-ms="close">Done</button></div>';
+function itinBtnLabel(){const n=state.itins.length;const b=document.getElementById("msItinBtn");b.textContent=n===0?"All itineraries":(n===1?state.itins[0]:n+" itineraries");b.classList.toggle("on",n>0);}
+function monthBtnLabel(){const n=state.months.length;const b=document.getElementById("msMonthBtn");b.textContent=n===0?"Any month":(n===1?MONNAME[Number(state.months[0])-1]:n+" months");b.classList.toggle("on",n>0);}
+function fillItinPanel(){
+  const pool=source.filter(t=>!state.region||t.region===state.region);
+  const itins=[...new Set(pool.flatMap(t=>itinToks(t.destinations).map(itinCat)))].sort((a,b)=>a.localeCompare(b));
+  state.itins=state.itins.filter(x=>itins.includes(x));
+  document.getElementById("msItinPanel").innerHTML=itins.map(i=>`<label class="ms-opt"><input type="checkbox" value="${esc(i)}"${state.itins.includes(i)?" checked":""}>${esc(i)}</label>`).join("")+MS_ACTIONS;
+  itinBtnLabel();
+}
+function fillMonthPanel(){
+  const pool=source.filter(t=>(!state.region||t.region===state.region)&&(!state.season||seasonKey(t)===state.season));
+  const months=[...new Set(pool.map(tripMonth).filter(Boolean))].sort((a,b)=>a-b).map(String);
+  state.months=state.months.filter(x=>months.includes(x));
+  document.getElementById("msMonthPanel").innerHTML=months.map(m=>`<label class="ms-opt"><input type="checkbox" value="${m}"${state.months.includes(m)?" checked":""}>${MONNAME[Number(m)-1]}</label>`).join("")+MS_ACTIONS;
+  monthBtnLabel();
+}
+function wireMS(key,apply){
+  const ms=document.getElementById("ms"+key),btn=document.getElementById("ms"+key+"Btn"),panel=document.getElementById("ms"+key+"Panel");
+  btn.addEventListener("click",e=>{e.stopPropagation();const open=panel.hidden;panel.hidden=!open;btn.setAttribute("aria-expanded",open?"true":"false");});
+  panel.addEventListener("change",()=>apply([...panel.querySelectorAll("input:checked")].map(c=>c.value)));
+  panel.addEventListener("click",e=>{const a=e.target.getAttribute&&e.target.getAttribute("data-ms");if(a==="close"){panel.hidden=true;btn.setAttribute("aria-expanded","false");}else if(a==="clear"){panel.querySelectorAll("input").forEach(c=>c.checked=false);apply([]);}});
+  document.addEventListener("click",e=>{if(ms&&!ms.contains(e.target)&&!panel.hidden){panel.hidden=true;btn.setAttribute("aria-expanded","false");}});
+}
+function initControls(){
+  buildNav();fillShipSelect();
+  fillSeasonSelect();
+  fillItinPanel();
+  fillMonthPanel();
+  document.getElementById("railUpdated").textContent="Updated on "+UPDATED;
+  const priced=source.map(t=>t.fromPrice).filter(x=>x!=null);
+  const ceil=priced.length?Math.ceil(Math.max(...priced)/500)*500:0;
+  const fP=document.getElementById("fPrice");fP.max=ceil;fP.value=ceil;state.price=ceil;
+  document.getElementById("priceVal").textContent=fmt(ceil);
+  const ships=[...new Set(TRIPS.map(t=>t.ship).filter(Boolean))].length;
+  document.getElementById("railFoot").innerHTML=`${TRIPS.length} sailings<br>${OPS.length} operators / ${ships} ships<br>${[...new Set(TRIPS.map(seasonKey))].length} region-seasons`;
+}
+
+function match(t){
+  if(state.op&&t.operator!==state.op)return false;
+  if(state.ship&&t.ship!==state.ship)return false;
+  if(state.itins.length){const cats=itinToks(t.destinations).map(itinCat);if(!state.itins.some(x=>cats.includes(x)))return false;}
+  if(state.region&&t.region!==state.region)return false;
+  if(state.season&&seasonKey(t)!==state.season)return false;
+  if(state.months.length&&!state.months.includes(String(tripMonth(t))))return false;
+  if(state.avail==="open"&&t.availCount===0)return false;
+  if(state.dur){const d=t.days||0;if(state.dur==="s"&&d>11)return false;if(state.dur==="m"&&(d<12||d>15))return false;if(state.dur==="l"&&d<16)return false;}
+  if(state.price&&t.fromPrice!=null&&t.fromPrice>state.price)return false;
+  if(state.q){const hay=(t.itinerary+" "+t.operator+" "+t.ship+" "+t.destinations+" "+t.startLoc+" "+t.endLoc+" "+t.region).toLowerCase();
+    if(!hay.includes(state.q.toLowerCase()))return false;}
+  return true;
+}
+function sortRows(list){
+  const c=list.slice();const bd=(a,b)=>((a.start||"")<(b.start||"")?-1:(a.start||"")>(b.start||"")?1:0);
+  if(state.sort==="date")c.sort(bd);
+  if(state.sort==="plow")c.sort((a,b)=>(a.fromPrice??1e12)-(b.fromPrice??1e12));
+  if(state.sort==="phigh")c.sort((a,b)=>(b.fromPrice??-1)-(a.fromPrice??-1));
+  if(state.sort==="dur")c.sort((a,b)=>(b.days||0)-(a.days||0)||bd(a,b));
+  return c;
+}
+function priceCell(c){
+  if(!c.available||(c.full==null&&c.disc==null))return `<td class="price out">&mdash;</td>`;
+  const disc=c.disc,full=c.full;
+  if(full!=null&&disc!=null&&full>disc)
+    return `<td class="price"><div class="d">${fmt(disc)}</div><div class="f">${fmt(full)}</div></td>`;
+  return `<td class="price full-only"><div class="d">${fmt(disc!=null?disc:full)}</div></td>`;
+}
+function sailCell(t){
+  const loop=t.startLoc&&t.startLoc===t.endLoc;
+  const route=loop?("Round trip "+esc(t.startLoc)):(esc(t.startLoc||"?")+" &rarr; "+esc(t.endLoc||"?"));
+  const lnk=t.lgpLink?`<div class="lnks"><a href="${esc(t.lgpLink)}" target="_blank" rel="noopener" title="Let&rsquo;s Go Polar listing">LGP Link</a></div>`:"";
+  return `<td class="c-date"><div class="dt"><span class="d1">${dtop(t.start)}</span><span class="d2">- ${dend(t.end)}${t.days?` (${t.days}D)`:""}</span></div><div class="copybtns"><button class="iconbtn" data-id="${t.id}" data-fmt="gmail" title="Copy for Gmail">${GMAIL_SVG}</button><button class="iconbtn" data-id="${t.id}" data-fmt="wa" title="Copy for WhatsApp (plain text)">${WA_SVG}</button><button class="iconbtn" data-id="${t.id}" data-fmt="pdf" title="Print a one-page brochure (PDF)">${PDF_SVG}</button></div></td>`+
+    `<td class="c-itin"><div class="itin">`+
+      `<div class="nm">${esc(t.itinerary||"(untitled sailing)")}</div>`+
+      `<div class="sub"><span class="rdot ${t.region==='Arctic'?'arctic':'antarctic'}"></span><span class="dest">${esc(t.destinations||"")}</span></div>`+
+      `<div class="route">${route}</div>`+lnk+
+    `</div></td>`;
+}
+
+const PDF_SVG='<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#d64828" d="M6 2h8l4 4v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/><path fill="#f4b6a4" d="M14 2l4 4h-4z"/><text x="11.5" y="17.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="7" font-weight="700" fill="#fff">PDF</text></svg>';
+const CONTACT={name:"Let\u2019s Go Polar",web:"www.letsgopolar.com",email:"info@antarcticatravelgroup.com",phone:"+1 (858) 914-6682",podcast:"letsgopolar.com/the-drake-shake",facebook:"facebook.com/groups/antarcticatravelgroup"};
+const GMAIL_SVG='<svg width="15" height="15" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4caf50" d="M45 16.2l-5 2.75-5 4.75V40h7a3 3 0 003-3V16.2z"/><path fill="#1e88e5" d="M3 16.2l3.614 1.71L13 23.7V40H6a3 3 0 01-3-3V16.2z"/><path fill="#e53935" d="M35 11.2L24 19.45 13 11.2 12 17l1 6.7 11 8.25 11-8.25 1-6.7z"/><path fill="#c62828" d="M3 12.298V16.2l10 7.5V11.2L9.876 8.859A4.298 4.298 0 003 12.298z"/><path fill="#fbc02d" d="M45 12.298V16.2l-10 7.5V11.2l3.124-2.341A4.298 4.298 0 0145 12.298z"/></svg>';
+const WA_SVG='<svg width="15" height="15" viewBox="0 0 32 32" aria-hidden="true"><path fill="#25d366" d="M16 3C9.4 3 4 8.4 4 15c0 2.1.6 4.2 1.6 6L4 29l8.2-1.6c1.7.9 3.7 1.4 5.8 1.4 6.6 0 12-5.4 12-12S22.6 3 16 3z"/><path fill="#fff" d="M12.5 9.6c-.3-.6-.5-.6-.8-.6h-.7c-.2 0-.6.1-.9.4s-1.2 1.2-1.2 2.9 1.2 3.4 1.4 3.6c.2.2 2.4 3.8 6 5.2 3 1.2 3.6 1 4.2.9.6-.1 2-.8 2.3-1.6.3-.8.3-1.5.2-1.6-.1-.1-.3-.2-.7-.4s-2-1-2.3-1.1c-.3-.1-.5-.2-.8.2s-.9 1.1-1.1 1.3c-.2.2-.4.3-.7.1-.4-.2-1.5-.6-2.9-1.8-1.1-1-1.8-2.2-2-2.6-.2-.4 0-.6.2-.8.2-.2.4-.4.5-.6.2-.2.2-.4.4-.6.1-.2.1-.5 0-.7-.1-.2-.8-2-1-2.5z"/></svg>';
+const CHECK_SVG='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2f8b6f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+function buildCopyWA(t){
+  const lines=[t.itinerary||"",
+    `${gdate(t.start)} - ${gdate(t.end)} - Ship: ${shipShort(t.ship)}`,
+    `Departing from: ${t.startLoc||""} - Returning to: ${t.endLoc||""}`];
+  t.cabins.forEach(c=>{if(!c.available)return;
+    if(c.full!=null&&c.disc!=null&&c.full>c.disc){lines.push(`- ${c.name} - was ${fmt(c.full)} > now ${fmt(c.disc)}`);}
+    else{const p=c.disc!=null?c.disc:c.full;lines.push(`- ${c.name} - ${fmt(p)}`);}
+  });
+  if(t.lgpLink){lines.push("");lines.push(t.lgpLink);}
+  return lines.join("\n");
+}
+function execCopyText(text){
+  const ta=document.createElement("textarea");ta.value=text;
+  ta.style.cssText="position:fixed;left:-9999px;top:0";document.body.appendChild(ta);
+  ta.focus();ta.select();let ok=false;try{ok=document.execCommand("copy");}catch(e){}
+  document.body.removeChild(ta);return ok;
+}
+function copyText(text,btn){
+  const done=()=>flashCopied(btn);
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done,()=>{execCopyText(text);done();});return;
+  }
+  execCopyText(text);done();
+}
+function shipShort(x){return (x||"").replace(/^(m\/s|s\/s)\s+/i,"").trim();}
+function gdate(iso){if(!iso)return"";const p=iso.split("-").map(Number);return `${MON[p[1]-1]} ${p[2]}, ${p[0]}`;}
+function buildBrochure(t){
+  const ship=esc(shipShort(t.ship));
+  const rows=t.cabins.map(c=>{
+    if(!c.available)return `<tr class="b-out"><td>${esc(c.name)}</td><td></td><td>Sold out</td><td></td></tr>`;
+    const disc=(c.full!=null&&c.disc!=null&&c.full>c.disc);
+    const sv=disc?c.full-c.disc:0;
+    return `<tr><td>${esc(c.name)}</td><td class="b-was">${disc?fmt(c.full):""}</td><td class="b-now">${fmt(c.disc!=null?c.disc:c.full)}</td><td class="b-sv">${sv>0?"save "+fmt(sv):""}</td></tr>`;
+  }).join("");
+  const addons=(t.activities&&t.activities.length)?`<div class="b-block"><h3>Optional add-ons</h3><ul class="b-list">`+t.activities.map(a=>`<li>${esc(a.text)}</li>`).join("")+`</ul></div>`:"";
+  const loop=t.startLoc&&t.startLoc===t.endLoc;
+  const route=loop?("Round trip "+esc(t.startLoc)):(esc(t.startLoc||"?")+" &rarr; "+esc(t.endLoc||"?"));
+  const link=t.lgpLink?esc(t.lgpLink):"";
+  return `<div class="b-page">
+    <div class="b-top"><div class="b-brand">${esc(CONTACT.name)}</div><div class="b-eyebrow">Voyage Brochure</div></div>
+    <div class="b-hero" id="bHeroSlot"></div>
+    <h1 class="b-title">${esc(t.itinerary||"")}</h1>
+    <div class="b-meta"><span class="b-tag ${t.region==='Arctic'?'arctic':'antarctic'}">${esc(t.region)}</span><span>${ship}</span><span>${esc(t.destinations||"")}</span></div>
+    <div class="b-facts">
+      <div><label>Departs</label><b>${gdate(t.start)}</b></div>
+      <div><label>Returns</label><b>${gdate(t.end)}</b></div>
+      <div><label>Length</label><b>${t.days?t.days+" days":esc(t.duration||"")}</b></div>
+      <div><label>Embark</label><b>${esc(t.startLoc||"")}</b></div>
+      <div><label>Disembark</label><b>${esc(t.endLoc||"")}</b></div>
+      <div><label>Route</label><b>${route}</b></div>
+    </div>
+    <div class="b-block b-about" id="bAboutSlot"></div>
+    <div class="b-block b-map" id="bMapSlot"></div>
+    <div class="b-block"><h3>Cabin pricing (USD, per person)</h3>
+      <table class="b-tbl"><thead><tr><th>Cabin</th><th>Was</th><th>Now</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    ${addons}
+    <div class="b-block b-ship" id="bShipSlot"></div>
+    <div class="b-block b-incl" id="bInclSlot"></div>
+    <div class="b-block b-callout"><h3>Full description, voyage map &amp; photo gallery</h3>
+      <p>${link?`See the complete itinerary, route map and images at:<br><a href="${link}">${link}</a>`:"Ask your Let\u2019s Go Polar consultant for the full itinerary, map and photos."}</p>
+    </div>
+    <div class="b-foot"><b>${esc(CONTACT.name)}</b><br>
+      ${esc(CONTACT.phone)} &nbsp;|&nbsp; ${esc(CONTACT.email)} &nbsp;|&nbsp; ${esc(CONTACT.web)}<br>
+      Podcast: ${esc(CONTACT.podcast)} &nbsp;|&nbsp; ${esc(CONTACT.facebook)}<br>
+      <span class="b-note">Fares shown are current at ${UPDATED} and subject to change and availability.</span></div>
+  </div>`;
+}
+function renderHeroHTML(gallery){
+  if(!gallery||!gallery.length) return "";
+  return `<img class="b-hero-img" src="${esc(gallery[0])}" alt="">`;
+}
+function renderAboutHTML(description, gallery){
+  const hasDesc=!!(description&&description.trim());
+  const extra=(gallery&&gallery.length>1)?gallery.slice(1,3):[];
+  if(!hasDesc&&!extra.length) return "";
+  let h=`<h3>About this voyage</h3>`;
+  if(hasDesc) h+=`<p class="b-desc">${esc(description)}</p>`;
+  if(extra.length){
+    h+=`<div class="b-gallery">`+extra.map(u=>`<img class="b-gcell" src="${esc(u)}" alt="">`).join("")+`</div>`;
+  }
+  return h;
+}
+function renderMapHTML(mapUrl, route){
+  if(!mapUrl) return "";
+  const cap=route?`<div class="b-map-cap">${esc(route)}</div>`:"";
+  return `<h3>Voyage map</h3><div class="b-map-wrap"><img class="b-map-img" src="${esc(mapUrl)}" alt="Voyage map">${cap}</div>`;
+}
+function renderShipHTML(ship, shipName){
+  if(!ship) return "";
+  const hasDesc=!!(ship.description&&ship.description.trim());
+  const spec=ship.spec||{};
+  const specKeys=Object.keys(spec).filter(k=>spec[k]&&String(spec[k]).trim());
+  if(!hasDesc&&!specKeys.length) return "";
+  let h=`<h3>The ship${shipName?": "+esc(shipName):""}</h3>`;
+  if(hasDesc) h+=`<p class="b-desc">${esc(ship.description)}</p>`;
+  if(specKeys.length){
+    h+=`<div class="b-ship-spec">`+specKeys.map(k=>`<div><label>${esc(k)}</label><b>${esc(String(spec[k]))}</b></div>`).join("")+`</div>`;
+  }
+  return h;
+}
+function renderInclHTML(inc, exc){
+  if((!inc||!inc.length)&&(!exc||!exc.length)) return "";
+  const col=(title,items)=> (items&&items.length)
+    ? `<div class="b-incl-col"><h4>${title}</h4><ul class="b-list">`+items.map(x=>`<li>${esc(x)}</li>`).join("")+`</ul></div>`
+    : "";
+  return `<h3>Inclusions &amp; Exclusions</h3><div class="b-incl-grid">${col("Included",inc)}${col("Not included",exc)}</div>`;
+}
+function waitForBrochureImages(maxMs){
+  return new Promise(resolve=>{
+    const imgs=Array.from(document.querySelectorAll("#brochure img"));
+    if(!imgs.length) return resolve();
+    let pending=imgs.length, done=false;
+    const finish=()=>{ if(done) return; done=true; resolve(); };
+    const tick=()=>{ pending--; if(pending<=0) finish(); };
+    imgs.forEach(im=>{
+      if(im.complete && im.naturalWidth>0){ tick(); }
+      else if(im.complete && im.naturalWidth===0){ tick(); } // errored/empty
+      else { im.addEventListener("load",tick,{once:true}); im.addEventListener("error",tick,{once:true}); }
+    });
+    setTimeout(finish, maxMs); // never wait longer than this
+  });
+}
+function setPageOrientation(mode){ // mode: "portrait" | "landscape"
+  let el=document.getElementById("pageOrient");
+  if(!el){ el=document.createElement("style"); el.id="pageOrient"; document.head.appendChild(el); }
+  el.textContent = (mode==="portrait")
+    ? "@media print{@page{size:A4 portrait!important;margin:14mm!important}}"
+    : "@media print{@page{size:A4 landscape!important;margin:9mm!important}}";
+}
+function printBrochure(){
+  setPageOrientation("portrait");
+  document.body.classList.add("brochure-mode");
+  const done=()=>{document.body.classList.remove("brochure-mode");window.removeEventListener("afterprint",done);};
+  window.addEventListener("afterprint",done);
+  window.print();
+  setTimeout(done,800);
+}
+function openBrochure(t){
+  document.getElementById("brochure").innerHTML=buildBrochure(t);
+  const inclSlot=document.getElementById("bInclSlot");
+  const heroSlot=document.getElementById("bHeroSlot");
+  const aboutSlot=document.getElementById("bAboutSlot");
+  const mapSlot=document.getElementById("bMapSlot");
+  const shipSlot=document.getElementById("bShipSlot");
+  const dropEmpties=()=>{ // remove any slots left unfilled so nothing prints blank
+    [inclSlot,heroSlot,aboutSlot,mapSlot,shipSlot].forEach(s=>{ if(s && !s.innerHTML.trim()) s.remove(); });
+  };
+  // No link -> print pricing-only version.
+  if(!t.lgpLink){ dropEmpties(); printBrochure(); return; }
+  const enc=encodeURIComponent(t.lgpLink);
+  let printed=false;
+  const go=()=>{ if(printed) return; printed=true; dropEmpties(); waitForBrochureImages(4000).then(printBrochure); };
+  const timer=setTimeout(go,9000); // never hang the button
+  const pIncl=fetch(DATA_ENDPOINT+"?incl="+enc,{cache:"no-store"})
+    .then(r=>r.ok?r.json():null)
+    .then(d=>{ if(inclSlot){ const h=d?renderInclHTML(d.inclusions,d.exclusions):""; if(h) inclSlot.innerHTML=h; } })
+    .catch(()=>{});
+  const pMedia=fetch(DATA_ENDPOINT+"?trip_media="+enc,{cache:"no-store"})
+    .then(r=>r.ok?r.json():null)
+    .then(d=>{
+      if(!d) return;
+      if(heroSlot){ const h=renderHeroHTML(d.gallery); if(h) heroSlot.innerHTML=h; }
+      if(aboutSlot){ const h=renderAboutHTML(d.description,d.gallery); if(h) aboutSlot.innerHTML=h; }
+      if(mapSlot){ const rt=(t.startLoc&&t.startLoc===t.endLoc)?("Round trip from "+t.startLoc):((t.startLoc||"")+" \u2192 "+(t.endLoc||"")); const h=renderMapHTML(d.map,rt); if(h) mapSlot.innerHTML=h; }
+      if(shipSlot){ const h=renderShipHTML(d.ship,shipShort(t.ship)); if(h) shipSlot.innerHTML=h; }
+    })
+    .catch(()=>{});
+  Promise.all([pIncl,pMedia]).then(()=>{ clearTimeout(timer); go(); });
+}
+function buildCopy(t){
+  const H=[],T=[];
+  t.cabins.forEach(c=>{
+    if(!c.available)return;
+    if(c.full!=null&&c.disc!=null&&c.full>c.disc){
+      H.push(`<li>${esc(c.name)} - was ${fmt(c.full)} &gt; now <b>${fmt(c.disc)}</b></li>`);
+      T.push(`\u2022 ${c.name} - was ${fmt(c.full)} > now ${fmt(c.disc)}`);
+    }else{
+      const p=c.disc!=null?c.disc:c.full;
+      H.push(`<li>${esc(c.name)} - <b>${fmt(p)}</b></li>`);
+      T.push(`\u2022 ${c.name} - ${fmt(p)}`);
+    }
+  });
+  const link=t.lgpLink?`<a href="${esc(t.lgpLink)}">Link to trip itinerary</a><br>`:"";
+  const html=`<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#202124;line-height:1.5;background:#ffffff">`+
+    `<b><u>${esc(t.itinerary||"")}</u></b><br>`+
+    `<b>${gdate(t.start)} - ${gdate(t.end)} - Ship: ${esc(shipShort(t.ship))}</b><br>`+
+    `<b>Departing from: ${esc(t.startLoc||"")} - Returning to: ${esc(t.endLoc||"")}</b><br>`+
+    link+`<ul style="margin:10px 0 0;padding-left:22px;background:#ffffff">${H.join("")}</ul></div>`;
+  const tl=[t.itinerary||"",`${gdate(t.start)} - ${gdate(t.end)} - Ship: ${shipShort(t.ship)}`,
+    `Departing from: ${t.startLoc||""} - Returning to: ${t.endLoc||""}`];
+  if(t.lgpLink)tl.push(`Link to trip itinerary: ${t.lgpLink}`);
+  const text=tl.join("\n")+"\n\n"+T.join("\n");
+  return [html,text];
+}
+function flashCopied(btn){if(!btn)return;if(!btn.dataset.o)btn.dataset.o=btn.innerHTML;btn.innerHTML=CHECK_SVG;btn.classList.add("ok");clearTimeout(btn._t);btn._t=setTimeout(()=>{btn.innerHTML=btn.dataset.o;btn.classList.remove("ok");},1400);}
+function execCopy(html){
+  const d=document.createElement("div");d.contentEditable="true";
+  d.style.cssText="position:fixed;left:-9999px;top:0;background:#ffffff";d.innerHTML=html;document.body.appendChild(d);
+  const r=document.createRange();r.selectNodeContents(d);
+  const sel=window.getSelection();sel.removeAllRanges();sel.addRange(r);
+  let ok=false;try{ok=document.execCommand("copy");}catch(e){}
+  sel.removeAllRanges();document.body.removeChild(d);return ok;
+}
+function copyRich(html,text,btn){
+  const done=()=>flashCopied(btn);
+  if(navigator.clipboard&&window.ClipboardItem){
+    try{
+      const item=new ClipboardItem({"text/html":new Blob([html],{type:"text/html"}),"text/plain":new Blob([text],{type:"text/plain"})});
+      navigator.clipboard.write([item]).then(done,()=>{execCopy(html);done();});
+      return;
+    }catch(e){}
+  }
+  execCopy(html);done();
+}
+function lowestRate(t){
+  let lo=null;
+  (t.cabins||[]).forEach(c=>{ if(!c.available)return; const p=(c.disc!=null?c.disc:c.full); if(p!=null && (lo==null||p<lo)) lo=p; });
+  return lo;
+}
+// Best genuine discount across a trip's available cabins, as a whole-number %.
+// Returns 0 when no cabin has full > disc.
+function bestDiscountPct(t){
+  let best=0;
+  (t.cabins||[]).forEach(c=>{
+    if(!c.available) return;
+    if(c.full!=null && c.disc!=null && c.full>c.disc){
+      const pct=Math.round((1 - c.disc/c.full)*100);
+      if(pct>best) best=pct;
+    }
+  });
+  return best;
+}
+function copyBtns(t){
+  return `<div class="copybtns"><button class="iconbtn" data-id="${t.id}" data-fmt="gmail" title="Copy for Gmail">${GMAIL_SVG}</button><button class="iconbtn" data-id="${t.id}" data-fmt="wa" title="Copy for WhatsApp (plain text)">${WA_SVG}</button><button class="iconbtn" data-id="${t.id}" data-fmt="pdf" title="Print a one-page brochure (PDF)">${PDF_SVG}</button></div>`;
+}
+function cabinListHTML(t){
+  const rows=(t.cabins||[]).map(c=>{
+    if(!c.available) return `<div class="cab-row out"><span>${esc(c.name)}</span><span>Sold out</span></div>`;
+    const disc=(c.full!=null&&c.disc!=null&&c.full>c.disc);
+    const now=fmt(c.disc!=null?c.disc:c.full);
+    const was=disc?`<s>${fmt(c.full)}</s> `:"";
+    return `<div class="cab-row"><span>${esc(c.name)}</span><span>${was}<b>${now}</b></span></div>`;
+  }).join("");
+  return `<div class="cab-list">${rows||'<div class="cab-row"><span>No cabin data</span><span></span></div>'}</div>`;
+}
+function metaLine(t){
+  const loop=t.startLoc&&t.startLoc===t.endLoc;
+  const route=loop?("Round trip "+esc(t.startLoc)):(esc(t.startLoc||"?")+" &rarr; "+esc(t.endLoc||"?"));
+  return {route};
+}
+function cardHTML(t){
+  const {route}=metaLine(t);
+  const lnk=t.lgpLink?`<a class="lgp" href="${esc(t.lgpLink)}" target="_blank" rel="noopener">LGP Link</a>`:"";
+  const lo=lowestRate(t);
+  const from=lo!=null?`Starting from ${fmt(lo)}`:"Sold out";
+  const pct=bestDiscountPct(t);
+  const pctBadge=pct>0?` <span class="disc-badge">-${pct}%</span>`:"";
+  return `<div class="cardv" data-card="${t.id}">
+    <div class="cardv-top">
+      <div class="cardv-date"><span class="d1">${dtop(t.start)}</span><span class="d2">- ${dend(t.end)}${t.days?` (${t.days}D)`:""}</span></div>
+      ${copyBtns(t)}
+    </div>
+    <div class="cardv-nm">${esc(t.itinerary||"(untitled sailing)")}</div>
+    <div class="cardv-sub"><span class="rdot ${t.region==='Arctic'?'arctic':'antarctic'}"></span><span class="dest">${esc(t.destinations||"")}</span></div>
+    <div class="cardv-route">${route}</div>
+    <div class="cardv-foot">
+      <span class="cardv-from">${from}${pctBadge}</span>
+      <span class="cardv-actions">${lnk}<button class="cab-toggle" data-toggle="${t.id}" aria-expanded="false" title="Show all cabins"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button></span>
+    </div>
+    <div class="cab-wrap" id="cab-${t.id}" hidden>${cabinListHTML(t)}</div>
+  </div>`;
+}
+function listHTML(t){
+  const {route}=metaLine(t);
+  const lnk=t.lgpLink?`<a class="lgp" href="${esc(t.lgpLink)}" target="_blank" rel="noopener">LGP Link</a>`:"";
+  const lo=lowestRate(t);
+  const from=lo!=null?`Starting from ${fmt(lo)}`:"Sold out";
+  return `<div class="listv" data-card="${t.id}">
+    <div class="listv-main">
+      <div class="listv-date"><span class="d1">${dtop(t.start)}</span><span class="d2">- ${dend(t.end)}${t.days?` (${t.days}D)`:""}</span></div>
+      <div class="listv-mid">
+        <div class="listv-nm">${esc(t.itinerary||"(untitled sailing)")} <span class="rdot ${t.region==='Arctic'?'arctic':'antarctic'}"></span></div>
+        <div class="listv-meta"><span>${esc(shipShort(t.ship))}</span> &middot; <span>${esc(t.destinations||"")}</span> &middot; <span>${route}</span></div>
+      </div>
+      <div class="listv-from">${from}</div>
+      <div class="listv-act">${copyBtns(t)}${lnk}<button class="cab-toggle" data-toggle="${t.id}" aria-expanded="false" title="Show all cabins"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button></div>
+    </div>
+    <div class="cab-wrap" id="cab-${t.id}" hidden>${cabinListHTML(t)}</div>
+  </div>`;
+}
+function renderCards(filtered, sheet, asList){
+  const ordered=sortRows(filtered.slice());
+  // group by operator for a light header, keeps parity with table
+  const byOp=new Map();
+  ordered.forEach(t=>{ const k=t.operator||"(unknown)"; if(!byOp.has(k))byOp.set(k,[]); byOp.get(k).push(t); });
+  let html="";
+  [...byOp.keys()].sort((a,b)=>a.localeCompare(b)).forEach(op=>{
+    html+=`<div class="vgroup"><div class="vgroup-h">${esc(op)}</div>`;
+    html+= asList ? `<div class="listwrap">`+byOp.get(op).map(listHTML).join("")+`</div>`
+                  : `<div class="cardgrid">`+byOp.get(op).map(cardHTML).join("")+`</div>`;
+    html+=`</div>`;
+  });
+  sheet.innerHTML=html;
+}
+function render(){
+  const filtered=source.filter(match);
+  const sheet=document.getElementById("sheet");
+  // group by ship + cabin signature
+  const groups=new Map();
+  filtered.forEach(t=>{
+    const key=t.ship||"(unknown ship)";
+    if(!groups.has(key))groups.set(key,{ship:t.ship,operator:t.operator,region:t.region,cabins:[],cabinSet:new Set(),rows:[]});
+    const g=groups.get(key);
+    t.cabins.forEach(c=>{if(!g.cabinSet.has(c.name)){g.cabinSet.add(c.name);g.cabins.push(c.name);}});
+    g.rows.push(t);
+  });
+  document.getElementById("countNote").textContent=`${filtered.length} of ${source.length} sailings  /  ${groups.size} ${groups.size===1?'ship':'ships'}`;
+  if(!groups.size){sheet.innerHTML=`<div class="empty"><h3>No sailings match those filters</h3><p>Try widening the price cap or clearing a filter.</p><button id="resetEmpty">Clear all filters</button></div>`;
+    document.getElementById("resetEmpty").addEventListener("click",doReset);return;}
+  // order groups: by operator then ship
+  if(state.view==="card"){
+    renderCards(filtered, sheet, false);
+    updatePrintHead();
+    return;
+  }
+  const ordered=[...groups.values()].sort((a,b)=>(a.operator||"").localeCompare(b.operator||"")||(a.ship||"").localeCompare(b.ship||""));
+  let html="";
+  ordered.forEach(g=>{
+    const rows=sortRows(g.rows);
+    const nCol=g.cabins.length+2;
+    const region=g.rows[0].region;
+    let head=`<tr class="ship-row"><th colspan="${nCol}"><div class="ship-bar">
+      <span class="snm">${esc(g.ship)}</span><span class="sop">${esc(g.operator)}</span>
+      <span class="stag ${region==='Arctic'?'arctic':'antarctic'}">${region}</span>
+      <span class="scount">${rows.length} ${rows.length===1?'departure':'departures'}</span></div></th></tr>`;
+    let cols=`<tr class="col-row"><th class="c-date">Departs</th><th class="c-itin">Itinerary</th>`;
+    g.cabins.forEach(c=>cols+=`<th>${esc(c)}</th>`);
+    cols+=`</tr>`;
+    let body="";
+    rows.forEach(t=>{
+      const cm={};t.cabins.forEach(c=>cm[c.name]=c);
+      body+=`<tr>${sailCell(t)}`;
+      g.cabins.forEach(name=>{const c=cm[name];body+=c?priceCell(c):`<td class="price na" title="Not offered this season">&middot;</td>`;});
+      body+=`</tr>`;
+    });
+    html+=`<table class="ship"><thead>${head}${cols}</thead><tbody>${body}</tbody></table>`;
+  });
+  sheet.innerHTML=html;
+  updatePrintHead();
+}
+function updatePrintHead(){
+  const filtered=source.filter(match);
+  const parts=[state.op?state.op:"All operators"];
+  if(state.ship)parts.push("Ship: "+state.ship);
+  if(state.itins.length)parts.push("Itineraries: "+state.itins.join(", "));
+  if(state.region)parts.push(state.region);
+  if(state.season)parts.push(keyLabelFull(state.season));
+  if(state.months.length)parts.push(state.months.map(m=>MONNAME[Number(m)-1]).join(", "));
+  if(state.dur)parts.push({s:"Up to 11 days",m:"12 to 15 days",l:"16+ days"}[state.dur]);
+  if(state.avail==="open")parts.push("Open cabins only");
+  const ceil=Number(document.getElementById("fPrice").max);
+  if(state.price&&state.price<ceil)parts.push("Under "+fmt(state.price));
+  if(state.q)parts.push('Search: "'+state.q+'"');
+  const d=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  const ph=document.getElementById("printHead");
+  if(ph)ph.innerHTML=`<div class="ph-title">Let&rsquo;s Go Polar Dashboard</div>`+
+    `<div class="ph-sub">Dates and rates &middot; ${filtered.length} sailings &middot; ${parts.join(" &middot; ")}</div>`+
+    `<div class="ph-date">Generated ${d}. Net fare shown, full fare beneath. Prices per person.</div>`;
+}
+
+function measure(){
+  const tb=document.querySelector(".toolbar");
+  if(tb)document.documentElement.style.setProperty("--stick",tb.offsetHeight+"px");
+}
+
+function doReset(){
+  Object.assign(state,{q:"",ship:"",region:"",season:"",dur:"",avail:"",sort:"date"});state.itins=[];state.months=[];
+  const ceil=Number(document.getElementById("fPrice").max);state.price=ceil;
+  document.getElementById("q").value="";
+  ["fShip","fRegion","fSeason","fDur","fAvail"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("sort").value="date";
+  document.getElementById("fPrice").value=ceil;document.getElementById("priceVal").textContent=fmt(ceil);
+  fillShipSelect();fillSeasonSelect();fillItinPanel();fillMonthPanel();render();
+}
+function setOp(op){state.op=op;buildNav();fillShipSelect();render();}
+
+document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;render();});
+document.getElementById("fShip").addEventListener("change",e=>{state.ship=e.target.value;render();});
+document.getElementById("fRegion").addEventListener("change",e=>{state.region=e.target.value;fillSeasonSelect();fillItinPanel();fillMonthPanel();render();});
+document.getElementById("fSeason").addEventListener("change",e=>{state.season=e.target.value;fillMonthPanel();render();});
+document.getElementById("fDur").addEventListener("change",e=>{state.dur=e.target.value;render();});
+document.getElementById("fAvail").addEventListener("change",e=>{state.avail=e.target.value;render();});
+document.getElementById("sort").addEventListener("change",e=>{state.sort=e.target.value;render();});
+document.getElementById("fPrice").addEventListener("input",e=>{state.price=Number(e.target.value);document.getElementById("priceVal").textContent=fmt(state.price);render();});
+document.getElementById("fOpMob").addEventListener("change",e=>setOp(e.target.value));
+document.getElementById("sheet").addEventListener("click",e=>{const b=e.target.closest(".iconbtn");if(!b)return;const t=byId[b.getAttribute("data-id")];if(!t)return;const fmt2=b.getAttribute("data-fmt");if(fmt2==="wa"){copyText(buildCopyWA(t),b);}else if(fmt2==="pdf"){openBrochure(t);}else{const cp=buildCopy(t);copyRich(cp[0],cp[1],b);}});
+document.getElementById("reset").addEventListener("click",doReset);
+document.getElementById("pdfBtn").addEventListener("click",()=>{updatePrintHead();setPageOrientation("landscape");window.print();});
+document.getElementById("opNav").addEventListener("click",e=>{const b=e.target.closest(".op-btn");if(!b)return;setOp(b.getAttribute("data-op"));});
+
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const filtered=sortRows(source.filter(match));
+  const head=["Departs","Returns","Operator","Ship","Itinerary","Region","Destinations","Length","Embark","Disembark","Season","From (net)","From (full)"];
+  const q=v=>{v=(v==null?"":String(v));return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const lines=[head.join(",")];
+  filtered.forEach(t=>lines.push([t.startRaw,t.endRaw,t.operator,t.ship,t.itinerary,t.region,t.destinations,t.duration,t.startLoc,t.endLoc,"20"+t.season,t.fromPrice??"sold out",t.fromFull??""].map(q).join(",")));
+  const blob=new Blob([lines.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="expedition-rates-view.csv";a.click();URL.revokeObjectURL(a.href);
+});
+
+// ---- Export Doc (Word-openable .doc, heading outline H1>H2>H3>H4) ----
+document.getElementById("docBtn").addEventListener("click",()=>{
+  const filtered=sortRows(source.filter(match));
+  const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const slug=s=>String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+  const seasonLabel=s=>"20"+s;
+  const fromLabel=t=>(t.fromPrice!=null)?fmt(t.fromPrice):"Sold out";
+
+  // Group: region -> operator -> season -> [trips]
+  function groupRegion(regionName){
+    const rows=filtered.filter(t=>t.region===regionName);
+    const ops=new Map();
+    rows.forEach(t=>{
+      if(!ops.has(t.operator)) ops.set(t.operator,new Map());
+      const seas=ops.get(t.operator);
+      const sk=seasonLabel(t.season);
+      if(!seas.has(sk)) seas.set(sk,[]);
+      seas.get(sk).push(t);
+    });
+    return ops; // Map(operator -> Map(season -> trips[]))
+  }
+
+  const regions=[["Arctic","Arctic"],["Antarctic","Antarctica"]]; // [data value, display H1]
+  const body=[];
+
+  // ---- H1: Quick Links ----
+  body.push('<h1>Quick Links</h1>');
+  regions.forEach(([rv,rlabel])=>{
+    const ops=groupRegion(rv);
+    if(!ops.size) return;
+    body.push('<p style="font-weight:bold;margin:6px 0 2px">'+esc(rlabel)+'</p>');
+    body.push('<p style="margin:0 0 8px">'+
+      Array.from(ops.keys()).map(op=>'<a href="#'+slug(rv+"-"+op)+'">'+esc(op)+'</a>').join(' &nbsp;|&nbsp; ')+
+      '</p>');
+  });
+
+  // ---- H1 per region -> H2 operator -> H3 season -> H4 itinerary ----
+  regions.forEach(([rv,rlabel])=>{
+    const ops=groupRegion(rv);
+    if(!ops.size) return;
+    body.push('<h1>'+esc(rlabel)+'</h1>');
+    ops.forEach((seasons,op)=>{
+      body.push('<h2><a name="'+slug(rv+"-"+op)+'"></a>'+esc(op)+'</h2>');
+      // sort seasons alphabetically for stable order
+      Array.from(seasons.keys()).sort().forEach(sk=>{
+        body.push('<h3>'+esc(sk)+'</h3>');
+        seasons.get(sk).forEach(t=>{
+          body.push('<h4>'+esc(t.itinerary||"")+'</h4>');
+          const bits=[];
+          bits.push(esc(gdate(t.start))+" &ndash; "+esc(gdate(t.end)));
+          bits.push("Ship: "+esc(shipShort(t.ship)));
+          bits.push("From: "+esc(fromLabel(t)));
+          body.push('<p style="margin:2px 0">'+bits.join(" &nbsp;&middot;&nbsp; ")+'</p>');
+          if(t.lgpLink) body.push('<p style="margin:0 0 8px"><a href="'+esc(t.lgpLink)+'">'+esc(t.lgpLink)+'</a></p>');
+          else body.push('<p style="margin:0 0 8px"></p>');
+        });
+      });
+    });
+  });
+
+  const doc='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'+
+    '<head><meta charset="utf-8"><title>Dates and Rates</title>'+
+    '<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#16303f}'+
+    'h1{font-size:20pt;color:#0c3a4f;margin:18pt 0 6pt}'+
+    'h2{font-size:15pt;color:#1a6a8e;margin:12pt 0 4pt}'+
+    'h3{font-size:12pt;color:#0c3a4f;margin:8pt 0 3pt}'+
+    'h4{font-size:11pt;color:#16303f;margin:6pt 0 1pt}'+
+    'a{color:#1a6a8e}</style></head><body>'+
+    '<p style="font-size:9pt;color:#5b7686">Let\u2019s Go Polar &middot; Dates and Rates &middot; '+filtered.length+' sailings &middot; generated '+ (UPDATED||"") +'</p>'+
+    body.join("")+
+    '</body></html>';
+
+  const blob=new Blob(["\ufeff"+doc],{type:"application/msword"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="dates-and-rates.doc";a.click();URL.revokeObjectURL(a.href);
+});
+
+// ---- View toggle (Table / Card / List) ----
+function setView(v){
+  // In deals mode (Closed Market), only the card layout is allowed.
+  if(new URLSearchParams(location.search).get("deals")) v="card";
+  state.view=v;
+  const card=document.getElementById("viewCard"), list=document.getElementById("viewList");
+  if(card) card.setAttribute("aria-pressed", v==="card"?"true":"false");
+  if(list) list.setAttribute("aria-pressed", v==="table"?"true":"false");
+  document.getElementById("sheet").classList.toggle("view-cards", v==="card");
+  document.getElementById("sheet").classList.toggle("view-list", v==="list");
+  render();
+}
+document.getElementById("viewCard").addEventListener("click",()=>setView(state.view==="card"?"table":"card"));
+document.getElementById("viewList").addEventListener("click",()=>setView("table"));
+// Expand/collapse cabin dropdown (event-delegated on the sheet).
+document.getElementById("sheet").addEventListener("click",e=>{
+  const tb=e.target.closest(".cab-toggle"); if(!tb) return;
+  const id=tb.getAttribute("data-toggle");
+  const wrap=document.getElementById("cab-"+id);
+  if(!wrap) return;
+  const open=wrap.hasAttribute("hidden");
+  if(open){ wrap.removeAttribute("hidden"); tb.setAttribute("aria-expanded","true"); tb.classList.add("open"); }
+  else { wrap.setAttribute("hidden",""); tb.setAttribute("aria-expanded","false"); tb.classList.remove("open"); }
+});
+
+window.addEventListener("resize",()=>{measure();});
+wireMS("Itin",vals=>{state.itins=vals;itinBtnLabel();render();});
+wireMS("Month",vals=>{state.months=vals;monthBtnLabel();render();});
+// ---- live data boot ----
+// Point this at your PHP proxy on the desk subdomain (same-origin, avoids CORS).
+// During testing you may temporarily set this to the Apps Script /exec URL.
+const DATA_ENDPOINT = "/rate-data.php";
+
+function bootWith(trips, updated){
+  const incoming = Array.isArray(trips) ? trips : [];
+  // Hide trips that have already departed. A trip departing TODAY is hidden;
+  // one departing tomorrow or later is kept (selling a cabin the day before is
+  // rare but possible). t.start is ISO yyyy-mm-dd, so string compare is safe.
+  const now = new Date();
+  const todayISO = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0");
+  TRIPS = incoming.filter(t => !t.start || t.start > todayISO);
+  source = TRIPS.slice();
+  byId = {};
+  TRIPS.forEach(t=>{ byId[t.id]=t; });
+  OPS = [...new Set(TRIPS.map(t=>t.operator).filter(Boolean))].sort();
+  OPCOUNT = {};
+  TRIPS.forEach(t=>{ OPCOUNT[t.operator]=(OPCOUNT[t.operator]||0)+1; });
+  if(updated) UPDATED = updated;
+  initControls();
+  render();
+  measure();
+}
+function showLoadState(msg, isError){
+  const host=document.getElementById("sheet");
+  if(host) host.innerHTML='<div style="padding:40px 24px;color:var(--muted);font:14px Inter,system-ui,sans-serif">'+msg+'</div>';
+  const ru=document.getElementById("railUpdated");
+  if(ru && !isError) ru.textContent="Loading...";
+}
+function loadData(){
+  showLoadState("Loading sailings...", false);
+  // Deals mode: ?deals=flash or ?deals=solo renders the Swan Closed Market slices
+  // using this same kanban engine, reading payload.swanFlash / payload.swanSolo.
+  const params = new URLSearchParams(location.search);
+  const deals = params.get("deals");
+  const embed = params.get("embed")==="1";
+  if(deals){
+    // Deals views (Closed Market) use the card layout only: each departure a card
+    // with a cabins/rates dropdown. Force card view and remove the view toggle.
+    state.view="card";
+    const tog=document.querySelector(".viewtog");
+    if(tog) tog.style.display="none";
+  }
+  if(embed){
+    // Embedded inside Closed Market: hide this page's own top menu.
+    document.body.classList.add("embed-mode");
+    const tb=document.querySelector(".topbar"); if(tb) tb.style.display="none";
+    document.documentElement.style.setProperty("--topbar","0px");
+  }
+  fetch(DATA_ENDPOINT, {cache:"no-store"})
+    .then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(payload=>{
+      let trips, label="";
+      if(deals==="flash"){ trips = payload && payload.swanFlash ? payload.swanFlash : []; label="Swan Flash deals"; }
+      else if(deals==="solo"){ trips = payload && payload.swanSolo ? payload.swanSolo : []; label="Swan Solo Cruise Plus deals"; }
+      else if(deals==="quarkcmd"){
+        trips = payload && payload.quarkCMD ? payload.quarkCMD : [];
+        const d = payload && payload.quarkCmdDate ? new Date(payload.quarkCmdDate) : null;
+        const ds = (d && !isNaN(d)) ? d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}) : "";
+        label = "Quark CMD" + (ds?(" — "+ds):"");
+      }
+      else if(deals==="swanantarctica"){ trips = payload && payload.swanAntarcticaCmd ? payload.swanAntarcticaCmd : []; label="Swan Antarctica CMD 26-27"; }
+      else { trips = payload && payload.trips ? payload.trips : payload; }
+      const updated = payload && payload.updated ? payload.updated : "";
+      // Apply the same "hide departed" rule here so empty-state messages are accurate.
+      const now=new Date();
+      const todayISO = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+      const upcoming = (Array.isArray(trips)?trips:[]).filter(t=>!t.start || t.start>todayISO);
+      if(deals){
+        const h=document.querySelector(".rail-title, h1, .title");
+        if(h) h.textContent = label;
+        document.title = label + " — Let's Go Polar";
+        if(!upcoming.length){ showLoadState("No "+label+" are currently on sale.", true); return; }
+      } else {
+        if(!upcoming.length){ showLoadState("No upcoming sailings to show.", true); return; }
+      }
+      bootWith(trips, updated);
+    })
+    .catch(err=>{
+      showLoadState("Could not load live data ("+err.message+"). Please refresh, or contact the site admin.", true);
+      console.error("Rate desk data load failed:", err);
+    });
+}
+loadData();
+</script>
+</body>
+</html>

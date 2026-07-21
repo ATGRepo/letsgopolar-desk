@@ -1,0 +1,23 @@
+# Runtime data generated on the server by the upload / refresh endpoints
+desk/*.json
+desk/*.csv
+
+# Server-only secrets and config (NEVER commit operator credentials)
+desk/config.php
+desk/config.secret.php
+.env
+.env.*
+
+# Deploy backups
+*.bak
+*.bak-*
+*.old
+*.old.php
+
+# Node / build
+node_modules/
+.next/
+
+# OS
+.DS_Store
+Thumbs.db
