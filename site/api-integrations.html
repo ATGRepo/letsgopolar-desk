@@ -94,6 +94,13 @@
   table.miss th,table.miss td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left}
   table.miss th{font:600 10px Inter;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
   table.miss code{background:var(--chip);padding:1px 5px;border-radius:4px;font-size:12px}
+  .collapse{border:1px solid var(--line);border-radius:10px;margin-top:12px;overflow:hidden}
+  .collapse-head{display:flex;align-items:center;gap:8px;justify-content:space-between;cursor:pointer;
+    padding:10px 14px;background:var(--chip);font:600 13px Inter;color:var(--accent-ink);user-select:none}
+  .collapse-head .arrow{transition:transform .15s ease;font-size:12px}
+  .collapse.open .collapse-head .arrow{transform:rotate(180deg)}
+  .collapse-body{display:none;padding:2px 14px 14px}
+  .collapse.open .collapse-body{display:block}
   .soon-note{background:var(--chip);border:1px dashed var(--line);border-radius:12px;padding:18px;color:var(--muted);font-size:13.5px;text-align:center}
   footer{max-width:1080px;margin:0 auto;padding:0 24px 40px;color:var(--muted);font-size:12px}
 </style>
@@ -158,6 +165,7 @@
       </div>
       <div class="msg" id="qkMsg"></div>
       <div id="qkReport"></div>
+      <div id="qkMapping"></div>
 
       <div class="qk-sub">
         <h3 class="qk-subh">LGP Links (Quark)</h3>
@@ -268,6 +276,9 @@
   const ENDPOINT = "/rate-data.php";
   let missing = [];
   const $=id=>document.getElementById(id);
+  // Collapsible sections: click a .collapse-head to toggle its .collapse-body.
+  document.addEventListener("click", e=>{ const hd=e.target.closest(".collapse-head"); if(hd && hd.parentElement) hd.parentElement.classList.toggle("open"); });
+  function lgpCollapsible(title, bodyHtml, open){ return '<div class="collapse'+(open?' open':'')+'"><div class="collapse-head"><span>'+title+'</span><span class="arrow">▾</span></div><div class="collapse-body">'+bodyHtml+'</div></div>'; }
   function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 
   $("owCheck").addEventListener("click", async ()=>{
@@ -312,7 +323,7 @@
       let h=`<table class="miss"><thead><tr><th>Code</th><th>Itinerary</th><th>Ship</th><th>Departs</th><th>Returns</th><th>Operator page</th></tr></thead><tbody>`;
       missing.forEach(m=>{ h+=`<tr><td><code>${esc(m.code)}</code></td><td>${esc(m.name)}</td><td>${esc(m.ship)}</td><td>${esc(m.departure)}</td><td>${esc(m.return)}</td><td><a href="${esc(m.operatorUrl)}" target="_blank" rel="noopener">open</a></td></tr>`; });
       h+=`</tbody></table>`;
-      $("owTable").innerHTML=h;
+      $("owTable").innerHTML=lgpCollapsible("Missing LGP links ("+miss+")", h, false);
       $("owDownload").disabled=false;
     }catch(e){
       $("owPill").className="pill warn"; $("owPill").textContent="Error";
@@ -374,6 +385,43 @@
       return t;
     }
 
+    // LGP-link mapping panel: reads the merged feed (rate-data.php) for how many
+    // Quark departures matched an LGP link and which are missing. Collapsible.
+    async function renderMapping(){
+      const box = $("qkMapping"); if(!box) return;
+      try{
+        const r = await fetch("rate-data.php", {cache:"no-store"});
+        const data = await r.json();
+        const d = data.quarkDiag || {};
+        const missing = Array.isArray(data.quarkMissing) ? data.quarkMissing : [];
+        const chip = (label,val) => '<div class="stat"><b>'+esc(val==null?"-":val)+'</b><span>'+esc(label)+'</span></div>';
+        let html = '<div class="statrow">'
+          + chip('LGP link matched', d.mapped_count)
+          + chip('Missing link', d.missing_count)
+          + chip('Links in sheet', d.links_count)
+          + '</div>';
+        if(missing.length){
+          let t = '<div class="actions" style="margin:2px 0 8px"><button class="btn ghost" id="qkMissDl">Download missing as CSV</button></div>';
+          t += '<table class="miss"><thead><tr><th>Departure</th><th>Ship</th><th>Departs</th><th>Returns</th><th>API id</th></tr></thead><tbody>';
+          missing.forEach(m=>{ t += '<tr><td><code>'+esc(m.departure_id)+'</code></td><td>'+esc(m.ship)+'</td><td>'+esc(m.start_date)+'</td><td>'+esc(m.end_date)+'</td><td>'+esc(m.api_id)+'</td></tr>'; });
+          t += '</tbody></table>';
+          html += lgpCollapsible("Missing LGP links ("+missing.length+")", t, false);
+        } else if(d.mapped_count!=null){
+          html += '<p class="linksmeta" style="color:#2f8b6f">All '+esc(d.mapped_count)+' departures have an LGP link.</p>';
+        }
+        box.innerHTML = html;
+        const dl = $("qkMissDl");
+        if(dl) dl.addEventListener("click", ()=>{
+          const q = s => { const v=String(s==null?"":s); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+          const head = ["operator_id","lgp_links","itinerary_name","ship","start_date","end_date","api_id"];
+          const lines = [head.join(",")];
+          missing.forEach(m=>lines.push([q(m.departure_id),q(""),q(""),q(m.ship),q(m.start_date),q(m.end_date),q(m.api_id)].join(",")));
+          const blob = new Blob([lines.join("\n")],{type:"text/csv"});
+          const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="quark-missing-lgp-links.csv"; a.click(); URL.revokeObjectURL(a.href);
+        });
+      }catch(e){ /* leave the mapping panel empty if the feed is unavailable */ }
+    }
+
     function renderReport(r){
       const box = $("qkReport");
       if(!r){ box.innerHTML=""; return; }
@@ -414,7 +462,8 @@
         $("qkStatus").textContent = "Last live pull: " + fmt(s.last_pull);
         if(s.report) renderReport(s.report);
         $("qkPill").className = "pill"; $("qkPill").textContent = "Live API";
-      }catch(e){ $("qkStatus").textContent = "Could not read status."; }
+        renderMapping();
+      }catch(e){ $("qkStatus").textContent = "Could not read status."; renderMapping(); }
     })();
 
     // Manual refresh (explicit POST).
@@ -431,6 +480,7 @@
           $("qkMsg").innerHTML = '<span style="color:#2f8b6f;font-weight:600">Done. '+esc(rep.new_count)+' departures pulled live in '+esc(rep.secs||"?")+'s.</span>';
           $("qkStatus").textContent = "Last live pull: " + fmt(rep.this_pull);
           try{ await fetch("rate-data.php?nocache=1", {cache:"no-store"}); }catch(_){}
+          renderMapping();
         }
       }catch(e){ $("qkMsg").textContent = "Refresh error: " + e.message; }
       finally{ btn.disabled = false; btn.textContent = orig; }
