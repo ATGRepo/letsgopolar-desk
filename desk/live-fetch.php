@@ -134,3 +134,98 @@ function lgp_quark_refresh($destDir) {
     $diag['secs']    = round(microtime(true) - $t0, 1);
     return $diag;
 }
+
+/** Lowest USD price_per_person across a Quark record's cabins (null if none). */
+function lgp_quark_min_price($e) {
+    $m = null;
+    foreach (($e['cabins'] ?? []) as $c) {
+        foreach (($c['occupancies'] ?? []) as $o) {
+            $p = $o['prices']['USD']['price_per_person'] ?? null;
+            if ($p !== null && ($m === null || $p < $m)) $m = $p;
+        }
+    }
+    return $m;
+}
+
+/** Index a Quark record list by departure_id. */
+function lgp_quark_index($list) {
+    $out = [];
+    if (!is_array($list)) return $out;
+    if (!lgp_is_list($list)) $list = array_values($list);
+    foreach ($list as $e) { if (!empty($e['departure_id'])) $out[$e['departure_id']] = $e; }
+    return $out;
+}
+
+/** Compare two Quark record lists. Returns removed / added / price_changes. */
+function lgp_quark_diff($old, $new) {
+    $oi = lgp_quark_index($old);
+    $ni = lgp_quark_index($new);
+    $removed = $added = $changes = [];
+    foreach ($oi as $id => $e) if (!isset($ni[$id])) {
+        $removed[] = ['departure_id'=>$id, 'ship'=>$e['ship_name']??'', 'start'=>$e['start_date']??'', 'old_from'=>lgp_quark_min_price($e)];
+    }
+    foreach ($ni as $id => $e) {
+        if (!isset($oi[$id])) {
+            $added[] = ['departure_id'=>$id, 'ship'=>$e['ship_name']??'', 'start'=>$e['start_date']??'', 'new_from'=>lgp_quark_min_price($e)];
+            continue;
+        }
+        $po = lgp_quark_min_price($oi[$id]); $pn = lgp_quark_min_price($e);
+        if ($po !== null && $pn !== null && $po != $pn) {
+            $changes[] = ['departure_id'=>$id, 'ship'=>$e['ship_name']??'', 'start'=>$e['start_date']??'', 'old_from'=>$po, 'new_from'=>$pn, 'delta'=>$pn - $po];
+        }
+    }
+    usort($changes, function($a, $b) { return abs($b['delta']) <=> abs($a['delta']); });
+    return ['removed'=>$removed, 'added'=>$added, 'price_changes'=>$changes];
+}
+
+/** Path to the Quark refresh meta/report file. */
+function lgp_quark_meta_path($dir) { return rtrim($dir, '/') . '/quark-refresh-meta.json'; }
+
+/** Current status: last pull time and last report, without pulling. */
+function lgp_quark_status($dir) {
+    $p = lgp_quark_meta_path($dir);
+    if (is_readable($p)) { $m = json_decode(file_get_contents($p), true); if (is_array($m)) return $m; }
+    $f = rtrim($dir, '/') . '/quark-detail.json';
+    $mt = is_readable($f) ? @filemtime($f) : null;
+    return ['last_pull' => $mt ? gmdate('c', $mt) : null, 'report' => null];
+}
+
+/**
+ * Manual Quark refresh with a before/after report. Backs up the old file,
+ * pulls live, diffs, persists a meta file, and returns the report.
+ */
+function lgp_quark_refresh_report($dir) {
+    $file     = rtrim($dir, '/') . '/quark-detail.json';
+    $status   = lgp_quark_status($dir);
+    $prevPull = $status['last_pull'] ?? (is_readable($file) ? gmdate('c', @filemtime($file)) : null);
+    $old      = is_readable($file) ? json_decode(file_get_contents($file), true) : [];
+    if (!is_array($old)) $old = [];
+
+    if (is_readable($file)) @copy($file, $file . '.bak-' . gmdate('Ymd-His'));
+
+    $diag = lgp_quark_refresh($dir);
+    if (empty($diag['ok'])) return ['ok' => false, 'operator' => 'quark', 'diag' => $diag];
+
+    $new = json_decode(file_get_contents($file), true);
+    if (!is_array($new)) $new = [];
+    $diff = lgp_quark_diff($old, $new);
+
+    $report = [
+        'ok'             => true,
+        'operator'       => 'quark',
+        'prev_pull'      => $prevPull,
+        'this_pull'      => gmdate('c'),
+        'old_count'      => count($old),
+        'new_count'      => count($new),
+        'removed'        => $diff['removed'],
+        'added'          => $diff['added'],
+        'price_changes'  => $diff['price_changes'],
+        'fetch_failures' => $diag['fetch_failures'] ?? 0,
+        'secs'           => $diag['secs'] ?? null,
+    ];
+    @file_put_contents(
+        lgp_quark_meta_path($dir),
+        json_encode(['last_pull' => $report['this_pull'], 'prev_pull' => $prevPull, 'report' => $report], JSON_UNESCAPED_SLASHES)
+    );
+    return $report;
+}
