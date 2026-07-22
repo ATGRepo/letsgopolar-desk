@@ -149,46 +149,26 @@
             <h2>Quark Expeditions</h2>
           </div>
         </div>
-        <span class="pill" id="qkPill">Awaiting files</span>
+        <span class="pill" id="qkPill">Live API</span>
       </div>
-      <p class="desc">Quark isn&rsquo;t connected to a live API yet. Upload the three exported files together and this page will merge the itineraries and departures, then cross-reference against the &ldquo;LGP Links&rdquo; CSV by API id. Departures with no matching link are listed below so you can add them to the sheet. Processing happens in your browser; nothing is sent to the server yet.</p>
-      <div class="qk-uploads">
-        <label class="qk-file"><span class="qk-lab">Itineraries Index</span><span class="qk-hint" id="qkItName">JSON &middot; not selected</span><input type="file" id="qkItInput" accept=".json,application/json"></label>
-        <label class="qk-file"><span class="qk-lab">Departures Index</span><span class="qk-hint" id="qkDepName">JSON &middot; not selected</span><input type="file" id="qkDepInput" accept=".json,application/json"></label>
-        <label class="qk-file"><span class="qk-lab">LGP Links</span><span class="qk-hint" id="qkCsvName">CSV &middot; not selected</span><input type="file" id="qkCsvInput" accept=".csv,text/csv"></label>
-      </div>
-      <div class="statrow">
-        <div class="stat"><b id="qkTotal">&ndash;</b><span>Departures</span></div>
-        <div class="stat"><b id="qkLinked">&ndash;</b><span>LGP link matched</span></div>
-        <div class="stat"><b id="qkMissing">&ndash;</b><span>Missing link</span></div>
-      </div>
+      <p class="desc">Quark departures and pricing now come <strong>live from Quark&rsquo;s API</strong>. Press the button below to pull the latest departures on demand (about 30 seconds). This is manual on purpose, so we stay within Quark&rsquo;s request limit. Run it when you want fresh numbers, for example once a week. The LGP Links CSV further down still maps each departure to its letsgopolar.com page.</p>
       <div class="actions">
-        <button class="btn" id="qkProcess" disabled>Process files</button>
-        <button class="btn ghost" id="qkDownload" disabled>Download missing as CSV</button>
-        <button class="btn ghost" id="qkDownloadMerged" disabled>Download merged CSV</button>
+        <button class="btn" id="qkRefresh">Refresh Quark from live API</button>
+        <span class="linksmeta" id="qkStatus">Checking last pull&hellip;</span>
       </div>
       <div class="msg" id="qkMsg"></div>
-      <div id="qkTable"></div>
+      <div id="qkReport"></div>
 
       <div class="qk-sub">
-        <h3 class="qk-subh">Departure details &amp; pricing &rarr; Dates and Rates</h3>
-        <p class="desc">Upload the Quark departure-detail JSON together with the Quark &ldquo;LGP Links&rdquo; CSV. This processes cabin pricing (transfer-inclusive full fare, deposit discounted fare, availability), matches each departure to its LGP link by operator id, and publishes the trips to Dates and Rates for the whole team. Any departure in the JSON that isn&rsquo;t in the links sheet is reported below so you can add it.</p>
+        <h3 class="qk-subh">LGP Links (Quark)</h3>
+        <p class="desc">The API does not provide letsgopolar.com links, so this mapping stays manual. Export the Quark &ldquo;LGP Links&rdquo; sheet as CSV and upload it here. After a refresh, any departure with no matching link is listed in the report.</p>
         <div class="qk-uploads">
-          <label class="qk-file"><span class="qk-lab">Departure details</span><span class="qk-hint" id="qkDetName">JSON &middot; not selected</span><input type="file" id="qkDetInput" accept=".json,application/json"></label>
           <label class="qk-file"><span class="qk-lab">LGP Links (Quark)</span><span class="qk-hint" id="qkLinksName">CSV &middot; not selected</span><input type="file" id="qkLinksInput" accept=".csv,text/csv"></label>
         </div>
-        <div class="statrow">
-          <div class="stat"><b id="qkPubTotal">&ndash;</b><span>Departures in JSON</span></div>
-          <div class="stat"><b id="qkPubMatched">&ndash;</b><span>Published to dashboard</span></div>
-          <div class="stat"><b id="qkPubMissing">&ndash;</b><span>Not in links sheet</span></div>
-        </div>
-        <div class="linksmeta" id="qkPubMeta"></div>
         <div class="actions">
-          <button class="btn" id="qkPublish" disabled>Publish to Dates and Rates</button>
-          <button class="btn ghost" id="qkPubDownload" disabled>Download not-in-links report</button>
+          <button class="btn ghost" id="qkLinksUpload" disabled>Upload LGP Links CSV</button>
         </div>
-        <div class="msg" id="qkPubMsg"></div>
-        <div id="qkPubTable"></div>
+        <div class="msg" id="qkLinksMsg"></div>
       </div>
     </div>
 
@@ -378,336 +358,104 @@
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="oceanwide-missing-lgp-links.csv";a.click();URL.revokeObjectURL(a.href);
   });
 
-  /* ---------------- Quark (browser-only merge + link match) ---------------- */
+  /* ---------------- Quark (live API refresh + report) ---------------- */
   (function(){
-    // Column drops from the reference notebook.
-    const IT_DROP  = ['modified','region_id','embarkation','embarkation_port_code','disembarkation','disembarkation_port_code','itinerary_map'];
-    const DEP_DROP = ['modified','ship_id','tax_rate','languages'];
+    const REFRESH = "refresh.php?op=quark";
+    const fmt = iso => { if(!iso) return "never"; const d=new Date(iso); return isNaN(d)?iso:d.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+    const money = n => (n==null) ? "" : "$"+Number(n).toLocaleString();
+    const esc = s => String(s==null?"":s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
-    let itData=null, depData=null, csvRows=null;   // parsed inputs
-    let qkMissing=[], qkMerged=[];                  // results
-
-    const setState=()=>{
-      const ready = itData && depData && csvRows;
-      $("qkProcess").disabled = !ready;
-      if(ready){ $("qkPill").className="pill"; $("qkPill").textContent="Ready to process"; }
-    };
-
-    function readFile(input, kind, nameEl, onOk){
-      input.addEventListener("change", e=>{
-        const f = e.target.files && e.target.files[0];
-        if(!f){ return; }
-        const rd = new FileReader();
-        rd.onload = ()=>{
-          try{
-            const val = onOk(rd.result);
-            $(nameEl).textContent = kind + " \u00b7 " + f.name;
-            input.closest(".qk-file").classList.add("ok");
-            setState();
-          }catch(err){
-            $(nameEl).textContent = kind + " \u00b7 could not read (" + (err.message||"error") + ")";
-            input.closest(".qk-file").classList.remove("ok");
-          }
-        };
-        rd.readAsText(f);
-      });
+    function tbl(title, arr, cols){
+      if(!arr || !arr.length) return "";
+      let t = '<h4 class="qk-subh">'+esc(title)+' ('+arr.length+')</h4><table class="miss"><tr>'+cols.map(c=>'<th>'+esc(c.h)+'</th>').join("")+'</tr>';
+      arr.slice(0,50).forEach(x => { t += '<tr>'+cols.map(c=>'<td>'+esc(c.f(x))+'</td>').join("")+'</tr>'; });
+      t += '</table>';
+      if(arr.length>50) t += '<p class="linksmeta">Showing first 50 of '+arr.length+'.</p>';
+      return t;
     }
 
-    // JSON dicts -> arrays of values (mirrors "for key,value in data.items(): list.append(value)")
-    readFile($("qkItInput"), "JSON", "qkItName", txt=>{ const o=JSON.parse(txt); itData=Object.values(o); if(!itData.length) throw new Error("empty"); return itData; });
-    readFile($("qkDepInput"),"JSON", "qkDepName", txt=>{ const o=JSON.parse(txt); depData=Object.values(o); if(!depData.length) throw new Error("empty"); return depData; });
-
-    // CSV parser (handles quoted fields with commas / quotes).
-    function parseCSV(text){
-      text = text.replace(/^\uFEFF/,"").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
-      const rows=[]; let row=[], cur="", q=false;
-      for(let i=0;i<text.length;i++){
-        const c=text[i];
-        if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
-        else { if(c==='"') q=true; else if(c===','){ row.push(cur); cur=""; } else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=""; } else cur+=c; }
+    function renderReport(r){
+      const box = $("qkReport");
+      if(!r){ box.innerHTML=""; return; }
+      if(r.ok === false){
+        const why = (r.diag && r.diag.errors && r.diag.errors.join(", ")) || "unknown error";
+        box.innerHTML = '<p class="msg">Refresh failed: '+esc(why)+'</p>';
+        return;
       }
-      if(cur!==""||row.length){ row.push(cur); rows.push(row); }
-      const header=rows.shift().map(h=>h.trim());
-      return rows.filter(r=>r.length && r.some(x=>x!=="")).map(r=>{ const o={}; header.forEach((h,i)=>o[h]=r[i]!==undefined?r[i]:""); return o; });
+      const chip = (label,val) => '<div class="stat"><b>'+esc(val)+'</b><span>'+esc(label)+'</span></div>';
+      let html = '<div class="statrow">'
+        + chip('Departures before', r.old_count)
+        + chip('Departures now', r.new_count)
+        + chip('Price changes', (r.price_changes||[]).length)
+        + chip('Removed', (r.removed||[]).length)
+        + chip('Added', (r.added||[]).length)
+        + '</div>';
+      html += '<p class="linksmeta">Previous pull '+esc(fmt(r.prev_pull))+' &rarr; this pull '+esc(fmt(r.this_pull))
+        + (r.secs!=null ? ' &middot; '+esc(r.secs)+'s' : '')
+        + (r.fetch_failures ? ' &middot; '+esc(r.fetch_failures)+' fetch failures' : '') + '</p>';
+      html += tbl('Price changes', r.price_changes, [
+        {h:'Departure',f:x=>x.departure_id},{h:'Ship',f:x=>x.ship},{h:'Start',f:x=>x.start},
+        {h:'Was',f:x=>money(x.old_from)},{h:'Now',f:x=>money(x.new_from)},{h:'Change',f:x=>(x.delta>0?'+':'')+money(x.delta)}
+      ]);
+      html += tbl('Removed departures', r.removed, [
+        {h:'Departure',f:x=>x.departure_id},{h:'Ship',f:x=>x.ship},{h:'Start',f:x=>x.start},{h:'Was from',f:x=>money(x.old_from)}
+      ]);
+      html += tbl('Added departures', r.added, [
+        {h:'Departure',f:x=>x.departure_id},{h:'Ship',f:x=>x.ship},{h:'Start',f:x=>x.start},{h:'From',f:x=>money(x.new_from)}
+      ]);
+      box.innerHTML = html;
     }
-    readFile($("qkCsvInput"),"CSV","qkCsvName", txt=>{
-      const rows=parseCSV(txt);
-      if(!rows.length) throw new Error("empty");
-      if(!("API id" in rows[0]) || !("lgp_links" in rows[0])) throw new Error("need 'API id' and 'lgp_links' columns");
-      csvRows=rows; return rows;
-    });
 
-    const dropCols=(obj,drop)=>{ const o={}; Object.keys(obj).forEach(k=>{ if(drop.indexOf(k)===-1) o[k]=obj[k]; }); return o; };
-
-    $("qkProcess").addEventListener("click", ()=>{
-      $("qkMsg").textContent="Merging and matching...";
-      $("qkTable").innerHTML="";
+    // On load: show last pull + last report (no pull triggered).
+    (async function(){
       try{
-        // Index itineraries by id (after dropping cols).
-        const itById={};
-        itData.forEach(v=>{ const c=dropCols(v,IT_DROP); itById[String(v.id)]=c; });
-
-        // Build the CSV link map keyed by API id (as string).
-        const linkByApiId={};
-        csvRows.forEach(r=>{ const aid=String(r["API id"]||"").trim(); if(aid) linkByApiId[aid]=(r["lgp_links"]||"").trim(); });
-
-        // Outer merge on itinerary.id <-> departure.itinerary_id, keyed by departure.
-        qkMerged=[]; qkMissing=[];
-        let matched=0;
-        depData.forEach(d=>{
-          const dep=dropCols(d,DEP_DROP);
-          const itin=itById[String(d.itinerary_id)] || {};
-          const apiId=String(d.id||"").trim();
-          const link=linkByApiId[apiId]||"";
-          if(link) matched++;
-          const rowNum = itin.itinerary_name || dep.departure_name || "";
-          const merged={
-            api_id: apiId,
-            departure_id: dep.departure_id||"",
-            departure_name: dep.departure_name||"",
-            ship_name: dep.ship_name||"",
-            itinerary_name: itin.itinerary_name||"",
-            region: itin.region||"",
-            season: itin.season||"",
-            start_date: dep.start_date||"",
-            end_date: dep.end_date||"",
-            start_location: dep.start_location||"",
-            end_location: dep.end_location||"",
-            duration_days: dep.duration_days!=null?dep.duration_days:(itin.duration_days!=null?itin.duration_days:""),
-            expedition_name: itin.expedition_name||"",
-            lgp_link: link
-          };
-          qkMerged.push(merged);
-          if(!link) qkMissing.push(merged);
-        });
-
-        $("qkTotal").textContent=depData.length;
-        $("qkLinked").textContent=matched;
-        $("qkMissing").textContent=qkMissing.length;
-        $("qkPill").className = qkMissing.length ? "pill warn" : "pill ok";
-        $("qkPill").textContent = qkMissing.length ? (qkMissing.length+" missing") : "All linked";
-        $("qkDownload").disabled = !qkMissing.length;
-        $("qkDownloadMerged").disabled = !qkMerged.length;
-        $("qkMsg").innerHTML = `<span style="color:#2f8b6f;font-weight:600">Merged ${depData.length} departures across ${itData.length} itineraries.</span> ${matched} matched, ${qkMissing.length} missing an LGP link.`;
-
-        // Missing table.
-        if(qkMissing.length){
-          const rowsHtml = qkMissing.map(m=>`<tr>
-            <td>${esc(m.api_id)}</td>
-            <td>${esc(m.expedition_name||m.departure_name)}</td>
-            <td>${esc(m.ship_name)}</td>
-            <td>${esc(m.start_date)}</td>
-            <td>${esc(m.end_date)}</td>
-            <td>${esc(m.start_location)}</td>
-            <td>${esc(m.end_location)}</td>
-            <td>${esc(m.region)}</td>
-            <td>${esc(m.departure_id)}</td>
-          </tr>`).join("");
-          $("qkTable").innerHTML = `<p class="msg">${qkMissing.length} departures have no LGP link yet.</p>
-            <table class="miss"><thead><tr><th>API id</th><th>Itinerary</th><th>Ship</th><th>Departs</th><th>Returns</th><th>Start</th><th>End</th><th>Region</th><th>Operator id</th></tr></thead>
-            <tbody>${rowsHtml}</tbody></table>`;
-        }
-      }catch(err){
-        $("qkPill").className="pill warn"; $("qkPill").textContent="Error";
-        $("qkMsg").textContent="Could not process: "+(err.message||"unknown error");
-      }
-    });
-
-    function toCSV(rows, cols){
-      const q=s=>{const v=String(s==null?"":s);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-      const lines=[cols.join(",")];
-      rows.forEach(r=>lines.push(cols.map(c=>q(r[c])).join(",")));
-      return lines.join("\n");
-    }
-    function dl(name, text){
-      const blob=new Blob([text],{type:"text/csv"});
-      const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);
-    }
-    // Missing export: same column shape as the LGP Links sheet so rows can be pasted straight in (lgp_links blank).
-    $("qkDownload").addEventListener("click", ()=>{
-      if(!qkMissing.length) return;
-      const cols=["API id","operator_id","itinerary_name","ship","start_date","end_date","start_location","end_location","region","lgp_links"];
-      const rows=qkMissing.map(m=>({ "API id":m.api_id, operator_id:m.departure_id, itinerary_name:m.expedition_name||m.departure_name, ship:m.ship_name, start_date:m.start_date, end_date:m.end_date, start_location:m.start_location, end_location:m.end_location, region:m.region, lgp_links:"" }));
-      dl("quark-missing-lgp-links.csv", toCSV(rows, cols));
-    });
-    $("qkDownloadMerged").addEventListener("click", ()=>{
-      if(!qkMerged.length) return;
-      const cols=["api_id","departure_id","departure_name","ship_name","itinerary_name","expedition_name","region","season","start_date","end_date","start_location","end_location","duration_days","lgp_link"];
-      dl("quark-merged-departures.csv", toCSV(qkMerged, cols));
-    });
-  })();
-  /* ---------------- Quark publish (detail JSON + links CSV -> server -> dashboard) ---------------- */
-  (function(){
-    let detFile=null, linksFile=null;
-    const ready=()=>{ $("qkPublish").disabled = !(detFile && linksFile); };
-
-    $("qkDetInput").addEventListener("change", e=>{
-      const f=e.target.files&&e.target.files[0];
-      if(!f) return;
-      detFile=f; $("qkDetName").textContent="JSON \u00b7 "+f.name;
-      $("qkDetInput").closest(".qk-file").classList.add("ok"); ready();
-    });
-    $("qkLinksInput").addEventListener("change", e=>{
-      const f=e.target.files&&e.target.files[0];
-      if(!f) return;
-      linksFile=f; $("qkLinksName").textContent="CSV \u00b7 "+f.name;
-      $("qkLinksInput").closest(".qk-file").classList.add("ok"); ready();
-    });
-
-    async function post(url, file, filename){
-      const fd=new FormData(); fd.append("file", file, filename||file.name||"upload");
-      const ctrl=new AbortController();
-      const timer=setTimeout(()=>ctrl.abort(), 30000); // 30s cap so it can never hang forever
-      let r;
-      try{
-        r=await fetch(url,{method:"POST",body:fd,cache:"no-store",signal:ctrl.signal});
-      }catch(e){
-        clearTimeout(timer);
-        if(e.name==="AbortError") throw new Error("timed out after 30s contacting "+url+" (is the endpoint deployed and reachable?)");
-        throw new Error("network error contacting "+url+" ("+(e.message||"failed")+")");
-      }
-      clearTimeout(timer);
-      if(r.status===404) throw new Error("endpoint not found (404): "+url+" — upload this PHP file to the desk folder.");
-      if(!r.ok) throw new Error("server returned HTTP "+r.status+" from "+url);
-      const text=await r.text();
-      try{ return JSON.parse(text); }
-      catch(e){ throw new Error("unexpected non-JSON response from "+url+" (first bytes: "+text.slice(0,60).replace(/\s+/g," ")+")"); }
-    }
-
-    // Reduce the (potentially 30+ MB) detail JSON to only the fields the server
-    // merge uses, so the upload is ~1 MB instead of tens of MB. Lossless for our
-    // purposes: verified to produce identical dashboard output as the full file.
-    function slimDetail(text){
-      const full=JSON.parse(text);
-      const list=Array.isArray(full)?full:Object.values(full);
-      const optSlim=arr=>(arr||[]).map(o=>({option_name:o.option_name||"",
-        prices:{USD:{price_per_person:((o.prices||{}).USD||{}).price_per_person}}}));
-      const slimmed=list.map(e=>{
-        const cabins={};
-        const src=e.cabins||{};
-        Object.keys(src).forEach(cid=>{
-          const cd=src[cid]||{};
-          const occs=(cd.occupancies||[]).map(o=>{
-            const usd=((o.prices||{}).USD)||{};
-            return {
-              occupancy_description:o.occupancy_description||"",
-              spaces_available:o.spaces_available,
-              prices:{USD:{
-                price_per_person:usd.price_per_person,
-                mandatory_transfer_price_per_person:usd.mandatory_transfer_price_per_person,
-                deposit_only_prices:{total_price_per_person:((usd.deposit_only_prices||{}).total_price_per_person)}
-              }}
-            };
-          });
-          cabins[cid]={cabin_name:cd.cabin_name||"",occupancies:occs};
-        });
-        const opts=e.options||{};
-        return {
-          id:e.id, departure_id:e.departure_id||"", departure_name:e.departure_name||"",
-          ship_name:e.ship_name||"", start_date:e.start_date||"", end_date:e.end_date||"",
-          duration_days:e.duration_days||"", start_location:e.start_location||"", end_location:e.end_location||"",
-          url:e.url||"", cabins:cabins,
-          options:{included_options:optSlim(opts.included_options), paid_options:optSlim(opts.paid_options)}
-        };
-      });
-      return {count:list.length, blob:new Blob([JSON.stringify(slimmed)],{type:"application/json"})};
-    }
-
-    async function readFileText(file){
-      return new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.onerror=()=>rej(new Error("could not read file")); rd.readAsText(file); });
-    }
-
-    let qkPubMissing=[];
-    $("qkPublish").addEventListener("click", async ()=>{
-      if(!(detFile&&linksFile)) return;
-      $("qkPubMsg").textContent="Slimming the detail file...";
-      $("qkPubTable").innerHTML=""; $("qkPubDownload").disabled=true;
-      try{
-        let detailBlob, detCount=0;
-        try{
-          const text=await readFileText(detFile);
-          const slim=slimDetail(text);
-          detailBlob=slim.blob; detCount=slim.count;
-          $("qkPubMsg").textContent=`Detail slimmed (${detCount} departures, ${(detailBlob.size/1024/1024).toFixed(1)} MB). Uploading...`;
-        }catch(e){
-          $("qkPubMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Could not read/slim the detail JSON:</span> ${esc(e.message||"parse error")}`;
-          return;
-        }
-        const up1=await post("/upload-quark-links.php", linksFile);
-        if(!up1.ok){ $("qkPubMsg").textContent="Links upload rejected: "+(up1.error||"error"); return; }
-        const up2=await post("/upload-quark-detail.php", detailBlob, "quark-detail.json");
-        if(!up2.ok){ $("qkPubMsg").textContent="Detail upload rejected: "+(up2.error||"error"); return; }
-
-        $("qkPubMsg").textContent="Files saved. Building the dashboard feed...";
-        // Force a rebuild so the merge runs, then read the diagnostics.
-        const r=await fetch(ENDPOINT+"?nocache=1",{cache:"no-store"});
-        const data=await r.json();
-        const diag=data.quarkDiag||{};
-        qkPubMissing=Array.isArray(data.quarkMissing)?data.quarkMissing:[];
-        const total=diag.detail_count||up2.departures||0;
-        const matched=diag.mapped_count||0;
-        const miss=diag.missing_count!=null?diag.missing_count:qkPubMissing.length;
-
-        $("qkPubTotal").textContent=total;
-        $("qkPubMatched").textContent=matched;
-        $("qkPubMissing").textContent=miss;
-        $("qkPubDownload").disabled=!qkPubMissing.length;
-
-        if(diag.published){
-          const d=new Date(diag.published);
-          const when=isNaN(d)?diag.published:d.toLocaleString();
-          $("qkPubMeta").innerHTML=`Last published <b>${esc(when)}</b> &middot; ${matched} in dashboard &middot; ${diag.links_count||0} rows in links sheet`;
-        }
-
-        if(diag.error){
-          $("qkPubMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Processed with an issue:</span> ${esc(diag.error)}. Links in sheet: ${diag.links_count||0}.`;
-        } else {
-          $("qkPubMsg").innerHTML=`<span style="color:#2f8b6f;font-weight:600">Published ${matched} Quark departures to Dates and Rates.</span> ${miss} were not found in the links sheet${miss?" (listed below)":""}. Links in sheet: ${diag.links_count||0}.`;
-        }
-
-        if(qkPubMissing.length){
-          const rows=qkPubMissing.map(m=>`<tr>
-            <td>${esc(m.departure_id)}</td>
-            <td>${esc(m.api_id)}</td>
-            <td>${esc(m.ship)}</td>
-            <td>${esc(m.start_date)}</td>
-            <td>${esc(m.end_date)}</td>
-          </tr>`).join("");
-          $("qkPubTable").innerHTML=`<p class="msg">${qkPubMissing.length} departures in the JSON have no row in the Quark links sheet.</p>
-            <table class="miss"><thead><tr><th>Operator id</th><th>API id</th><th>Ship</th><th>Departs</th><th>Returns</th></tr></thead>
-            <tbody>${rows}</tbody></table>`;
-        }
-      }catch(err){
-        $("qkPubMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Publish failed:</span> ${esc(err.message||"unknown error")}`;
-      }
-    });
-
-    // On load, surface the last publish state (if Quark data is already live).
-    (async ()=>{
-      try{
-        const r=await fetch(ENDPOINT,{cache:"no-store"});
-        const data=await r.json();
-        const diag=data.quarkDiag||{};
-        if(diag.published){
-          const d=new Date(diag.published);
-          const when=isNaN(d)?diag.published:d.toLocaleString();
-          $("qkPubTotal").textContent=diag.detail_count||0;
-          $("qkPubMatched").textContent=diag.mapped_count||0;
-          $("qkPubMissing").textContent=diag.missing_count!=null?diag.missing_count:0;
-          $("qkPubMeta").innerHTML=`Last published <b>${esc(when)}</b> &middot; ${diag.mapped_count||0} in dashboard &middot; ${diag.links_count||0} rows in links sheet`;
-        }
-      }catch(e){ /* silent: nothing published yet */ }
+        const r = await fetch(REFRESH, {cache:"no-store"});
+        const s = await r.json();
+        $("qkStatus").textContent = "Last live pull: " + fmt(s.last_pull);
+        if(s.report) renderReport(s.report);
+        $("qkPill").className = "pill"; $("qkPill").textContent = "Live API";
+      }catch(e){ $("qkStatus").textContent = "Could not read status."; }
     })();
 
-    $("qkPubDownload").addEventListener("click", ()=>{
-      if(!qkPubMissing.length) return;
-      const cols=["operator_id","API id","ship","start_date","end_date","lgp_links"];
-      const q=s=>{const v=String(s==null?"":s);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-      const lines=[cols.join(",")];
-      qkPubMissing.forEach(m=>lines.push([q(m.departure_id),q(m.api_id),q(m.ship),q(m.start_date),q(m.end_date),q("")].join(",")));
-      const blob=new Blob([lines.join("\n")],{type:"text/csv"});
-      const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="quark-detail-not-in-links.csv";a.click();URL.revokeObjectURL(a.href);
+    // Manual refresh (explicit POST).
+    $("qkRefresh").addEventListener("click", async ()=>{
+      const btn = $("qkRefresh"); const orig = btn.textContent;
+      btn.disabled = true; btn.textContent = "Pulling from Quark, about 30s…";
+      $("qkMsg").textContent = "Contacting Quark and rebuilding departures. Please wait.";
+      try{
+        const r = await fetch("refresh.php", {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"op=quark&action=refresh", cache:"no-store"});
+        const rep = await r.json();
+        renderReport(rep);
+        if(rep.ok === false){ $("qkMsg").textContent = "Refresh failed. See details above."; }
+        else {
+          $("qkMsg").innerHTML = '<span style="color:#2f8b6f;font-weight:600">Done. '+esc(rep.new_count)+' departures pulled live in '+esc(rep.secs||"?")+'s.</span>';
+          $("qkStatus").textContent = "Last live pull: " + fmt(rep.this_pull);
+          try{ await fetch("rate-data.php?nocache=1", {cache:"no-store"}); }catch(_){}
+        }
+      }catch(e){ $("qkMsg").textContent = "Refresh error: " + e.message; }
+      finally{ btn.disabled = false; btn.textContent = orig; }
     });
+
+    // LGP Links CSV upload (still manual; the API has no links).
+    (function(){
+      let file = null;
+      $("qkLinksInput").addEventListener("change", e=>{
+        file = (e.target.files && e.target.files[0]) || null;
+        $("qkLinksName").textContent = file ? ("CSV · " + file.name) : "CSV · not selected";
+        $("qkLinksUpload").disabled = !file;
+      });
+      $("qkLinksUpload").addEventListener("click", async ()=>{
+        if(!file) return;
+        $("qkLinksMsg").textContent = "Uploading links CSV…";
+        try{
+          const fd = new FormData(); fd.append("file", file, file.name);
+          const r = await fetch("upload-quark-links.php", {method:"POST", body:fd, cache:"no-store"});
+          const j = await r.json().catch(()=>({}));
+          if(r.ok && j.ok !== false){ $("qkLinksMsg").innerHTML = '<span style="color:#2f8b6f;font-weight:600">Links uploaded.</span> Run a refresh to re-match.'; }
+          else { $("qkLinksMsg").textContent = "Upload rejected: " + (j.error || ("HTTP "+r.status)); }
+        }catch(e){ $("qkLinksMsg").textContent = "Upload error: " + e.message; }
+      });
+    })();
   })();
   /* ---------------- Aurora publish (services JSON + links CSV -> server -> dashboard) ---------------- */
   (function(){
