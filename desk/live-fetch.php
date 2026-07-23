@@ -86,6 +86,47 @@ function lgp_json($url, array $opts = []) {
 }
 
 /**
+ * Concurrent GET for many URLs (curl_multi), in batches. $reqs is an assoc array
+ * key => ['url'=>..., 'headers'=>[...]]. Returns key => [body|null, status, error|null].
+ * Used to keep large per-item pulls (e.g. Swan room-tariffs) within one request.
+ */
+function lgp_http_multi($reqs, $concurrency = 6, $timeout = 40) {
+    $results = [];
+    foreach ($reqs as $k => $_) $results[$k] = [null, 0, 'not_run'];
+    if (!function_exists('curl_multi_init')) return $results;
+    $keys = array_keys($reqs);
+    for ($i = 0; $i < count($keys); $i += $concurrency) {
+        $batch = array_slice($keys, $i, $concurrency);
+        $mh = curl_multi_init();
+        $handles = [];
+        foreach ($batch as $k) {
+            $r = $reqs[$k];
+            $ch = curl_init($r['url']);
+            $h = [];
+            foreach (($r['headers'] ?? []) as $hk => $hv) $h[] = $hk . ': ' . $hv;
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+                CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_TIMEOUT => $timeout, CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_USERAGENT => 'LGP-RateDesk-LiveFetch', CURLOPT_HTTPHEADER => $h,
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[$k] = $ch;
+        }
+        do { $st = curl_multi_exec($mh, $running); if ($running) curl_multi_select($mh, 1.0); } while ($running && $st == CURLM_OK);
+        foreach ($handles as $k => $ch) {
+            $body = curl_multi_getcontent($ch);
+            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err  = curl_error($ch) ?: null;
+            $results[$k] = [($body === false ? null : $body), $code, $err];
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+        }
+        curl_multi_close($mh);
+    }
+    return $results;
+}
+
+/**
  * Quark refresh: pull the departure index, fetch each departure's detail,
  * write the trimmed array to quark-detail.json in $destDir.
  * Drop-in replacement for the manually uploaded file. Returns a diag array.
@@ -469,5 +510,275 @@ function lgp_aurora_packages_report($dir) {
                'in_sheet' => count($sheet), 'new_count' => count($new), 'new' => $new,
                'stale_in_sheet' => $stale, 'secs' => $diag['secs']];
     @file_put_contents(rtrim($dir, '/') . '/aurora-packages-meta.json', json_encode(['last_pull' => $report['this_pull'], 'report' => $report], JSON_UNESCAPED_SLASHES));
+    return $report;
+}
+
+/* ===================== Swan Hellenic ===================== */
+
+/** JWT token from Swan authorise (cached per request). Returns token|null. */
+function lgp_swan_token() {
+    static $tok = false;
+    if ($tok !== false) return $tok;
+    $s = lgp_cfg()['swan'] ?? [];
+    if (empty($s['base']) || empty($s['auth_path']) || empty($s['login']) || empty($s['password'])) { $tok = null; return null; }
+    list($body, $code, $err) = lgp_http($s['base'] . $s['auth_path'], [
+        'method'  => 'POST',
+        'headers' => ['Content-Type' => 'application/x-www-form-urlencoded'],
+        'body'    => ['login' => $s['login'], 'password' => $s['password']],
+        'timeout' => 30,
+    ]);
+    if ($err !== null || $code >= 400) { $tok = null; return null; }
+    $j = json_decode((string) $body, true);
+    $tok = $j['result']['accessToken']['token'] ?? null;
+    return $tok;
+}
+
+/** API_id values from swan-lgp-links.csv (the cruise ids used by room-tariffs). */
+function lgp_swan_aids($dir) {
+    $p = rtrim($dir, '/') . '/swan-lgp-links.csv';
+    $out = [];
+    if (!is_readable($p)) return $out;
+    $c = preg_replace('/^\xEF\xBB\xBF/', '', file_get_contents($p));
+    $c = str_replace(["\r\n", "\r"], "\n", $c);
+    $lines = explode("\n", $c);
+    $ci = array_flip(array_map('trim', str_getcsv(array_shift($lines))));
+    if (!isset($ci['API_id'])) return $out;
+    foreach ($lines as $l) { if ($l === '') continue; $cols = str_getcsv($l); $id = trim($cols[$ci['API_id']] ?? ''); if ($id !== '') $out[$id] = true; }
+    return array_keys($out);
+}
+
+/** Is a Swan tariff family a known one (Child/Extra suffixes ignored)? */
+function lgp_swan_tariff_known($name) {
+    $base = preg_replace('/\s*\((Child|Extra)\)\s*$/', '', trim((string) $name));
+    $known = ['Cruise Plus', 'CRS Cruise Plus', 'Cruise Only', 'CRS Cruise Only',
+              'Arctic Flash Cruise Plus', 'Arctic Flash Cruise Only',
+              'Swan Flash Cruise Plus', 'Swan Flash Cruise Only',
+              'Swan Solo Cruise Plus', 'Swan Solo Cruise Only'];
+    return in_array($base, $known, true);
+}
+
+/** Slim one roomClass (cabin) into {name, avail, tariffs:{family:{single,double}}}. Prices are cents -> /100. */
+function lgp_swan_slim_room($rc) {
+    $tariffs = [];
+    foreach (($rc['tariffs'] ?? []) as $t) {
+        $tname = $t['meta_name'] ?? '';
+        if ($tname === '') continue;
+        foreach (($t['accommodations'] ?? []) as $acc) {
+            $occId = $acc['id'] ?? null;
+            $occ = ($occId == 1) ? 'single' : (($occId == 2) ? 'double' : null);
+            if ($occ === null) continue;
+            $pr = $acc['price'] ?? null;
+            if (!is_array($pr)) continue;
+            $full = isset($pr['value']) ? $pr['value'] / 100 : null;
+            $disc = isset($pr['discountedValue']) ? $pr['discountedValue'] / 100 : $full;
+            if (!isset($tariffs[$tname])) $tariffs[$tname] = [];
+            $tariffs[$tname][$occ] = ['full' => $full, 'disc' => $disc];
+        }
+    }
+    return ['name' => $rc['name'] ?? '', 'avail' => $rc['availability'] ?? 0, 'tariffs' => $tariffs];
+}
+
+/** Lowest double Cruise-Plus (non promo) disc price for a slim trip, for change detection. */
+function lgp_swan_std_price($trip) {
+    $m = null;
+    foreach (($trip['rooms'] ?? []) as $r) {
+        foreach (($r['tariffs'] ?? []) as $tn => $occ) {
+            if (stripos($tn, 'Cruise Plus') === false || stripos($tn, 'Flash') !== false || stripos($tn, 'Solo') !== false) continue;
+            $d = $occ['double']['disc'] ?? null;
+            if ($d !== null && ($m === null || $d < $m)) $m = $d;
+        }
+    }
+    return $m;
+}
+
+/**
+ * Room-tariffs refresh (frequent): for each API_id in the sheet, pull room
+ * tariffs, tag with the id (the API omits it), slim to the swan-trips.json shape
+ * merge_swan consumes.
+ */
+function lgp_swan_tariffs_refresh($dir) {
+    $t0 = microtime(true);
+    $diag = ['operator' => 'swan', 'mode' => 'tariffs', 'ok' => false, 'ids' => 0, 'written' => 0, 'fetch_failures' => 0, 'errors' => [], 'secs' => 0];
+    $s = lgp_cfg()['swan'] ?? [];
+    if (empty($s['base'])) { $diag['errors'][] = 'no_base'; return $diag; }
+    $tok = lgp_swan_token();
+    if (!$tok) { $diag['errors'][] = 'token_failed'; return $diag; }
+    $ids = lgp_swan_aids($dir);
+    $diag['ids'] = count($ids);
+    if (!$ids) { $diag['errors'][] = 'no_api_ids'; return $diag; }
+
+    $H = ['Authorization' => 'Bearer ' . $tok];
+    $reqs = [];
+    foreach ($ids as $id) $reqs[$id] = ['url' => $s['base'] . '/json/v3/cruise/room-tariffs?id=' . rawurlencode($id), 'headers' => $H];
+    $resps = lgp_http_multi($reqs, 6, 40);
+    $trips = [];
+    foreach ($ids as $id) {
+        list($body, $code, $err) = $resps[$id];
+        $j = is_string($body) ? json_decode($body, true) : null;
+        if ($err !== null || $code >= 400 || !is_array($j)) { $diag['fetch_failures']++; continue; }
+        $res = $j['result'] ?? null;
+        if (!is_array($res)) { $diag['fetch_failures']++; continue; }
+        $rooms = [];
+        foreach (($res['decks'] ?? []) as $deck) {
+            foreach (($deck['roomClasses'] ?? []) as $rc) {
+                $slim = lgp_swan_slim_room($rc);
+                if ($slim['name'] !== '' && $slim['tariffs']) $rooms[] = $slim;
+            }
+        }
+        $trips[] = ['id' => (string) $id, 'rooms' => $rooms];
+    }
+    if (!$trips) { $diag['errors'][] = 'no_trips'; return $diag; }
+
+    $target = rtrim($dir, '/') . '/swan-trips.json';
+    $tmp = $target . '.tmp';
+    if (@file_put_contents($tmp, json_encode($trips, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) === false) { $diag['errors'][] = 'write_failed'; return $diag; }
+    @rename($tmp, $target);
+    $diag['written'] = count($trips); $diag['ok'] = true; $diag['secs'] = round(microtime(true) - $t0, 1);
+    return $diag;
+}
+
+function lgp_swan_tariffs_status($dir) {
+    $p = rtrim($dir, '/') . '/swan-tariffs-meta.json';
+    if (is_readable($p)) { $m = json_decode(file_get_contents($p), true); if (is_array($m)) return $m; }
+    $f = rtrim($dir, '/') . '/swan-trips.json';
+    $mt = is_readable($f) ? @filemtime($f) : null;
+    return ['last_pull' => $mt ? gmdate('c', $mt) : null, 'report' => null];
+}
+
+/** Room-tariffs refresh + report: price changes, plus NEW tariff families flagged for review. */
+function lgp_swan_tariffs_refresh_report($dir) {
+    $file = rtrim($dir, '/') . '/swan-trips.json';
+    $st = lgp_swan_tariffs_status($dir);
+    $prev = $st['last_pull'] ?? (is_readable($file) ? gmdate('c', @filemtime($file)) : null);
+    $old = is_readable($file) ? json_decode(file_get_contents($file), true) : [];
+    if (!is_array($old)) $old = [];
+    if (is_readable($file)) @copy($file, $file . '.bak-' . gmdate('Ymd-His'));
+
+    $diag = lgp_swan_tariffs_refresh($dir);
+    if (empty($diag['ok'])) return ['ok' => false, 'operator' => 'swan', 'mode' => 'tariffs', 'diag' => $diag];
+
+    $new = json_decode(file_get_contents($file), true);
+    if (!is_array($new)) $new = [];
+    $oi = []; foreach ($old as $t) { if (isset($t['id'])) $oi[(string) $t['id']] = $t; }
+    $ni = []; foreach ($new as $t) { if (isset($t['id'])) $ni[(string) $t['id']] = $t; }
+    $removed = $added = $changes = [];
+    foreach ($oi as $id => $t) if (!isset($ni[$id])) $removed[] = ['id' => $id, 'old_from' => lgp_swan_std_price($t)];
+    foreach ($ni as $id => $t) {
+        if (!isset($oi[$id])) { $added[] = ['id' => $id, 'new_from' => lgp_swan_std_price($t)]; continue; }
+        $po = lgp_swan_std_price($oi[$id]); $pn = lgp_swan_std_price($t);
+        if ($po !== null && $pn !== null && $po != $pn) $changes[] = ['id' => $id, 'old_from' => $po, 'new_from' => $pn, 'delta' => $pn - $po];
+    }
+    usort($changes, function ($a, $b) { return abs($b['delta']) <=> abs($a['delta']); });
+
+    // New (unrecognized) tariff families, with sample cruises/prices, for review before Closed Market.
+    $newT = [];
+    foreach ($new as $trip) {
+        foreach (($trip['rooms'] ?? []) as $r) {
+            foreach (($r['tariffs'] ?? []) as $tn => $occ) {
+                if (lgp_swan_tariff_known($tn)) continue;
+                if (!isset($newT[$tn])) $newT[$tn] = ['tariff' => $tn, 'cruise_ids' => [], 'sample' => null];
+                if (!in_array($trip['id'], $newT[$tn]['cruise_ids'], true) && count($newT[$tn]['cruise_ids']) < 25) $newT[$tn]['cruise_ids'][] = $trip['id'];
+                if ($newT[$tn]['sample'] === null) $newT[$tn]['sample'] = ['room' => $r['name'], 'double' => $occ['double'] ?? null, 'single' => $occ['single'] ?? null];
+            }
+        }
+    }
+
+    $report = ['ok' => true, 'operator' => 'swan', 'mode' => 'tariffs', 'prev_pull' => $prev, 'this_pull' => gmdate('c'),
+               'old_count' => count($old), 'new_count' => count($new), 'ids' => $diag['ids'], 'fetch_failures' => $diag['fetch_failures'],
+               'removed' => $removed, 'added' => $added, 'price_changes' => $changes,
+               'new_tariffs' => array_values($newT), 'secs' => $diag['secs']];
+    @file_put_contents(rtrim($dir, '/') . '/swan-tariffs-meta.json', json_encode(['last_pull' => $report['this_pull'], 'report' => $report], JSON_UNESCAPED_SLASHES));
+    return $report;
+}
+
+/** swan-lgp-links.csv keyed by API_id, whole row (for enrichment). */
+function lgp_swan_sheet_rows($dir) {
+    $p = rtrim($dir, '/') . '/swan-lgp-links.csv';
+    $out = [];
+    if (!is_readable($p)) return $out;
+    $c = preg_replace('/^\xEF\xBB\xBF/', '', file_get_contents($p));
+    $c = str_replace(["\r\n", "\r"], "\n", $c);
+    $lines = explode("\n", $c);
+    $hdr = array_map('trim', str_getcsv(array_shift($lines)));
+    foreach ($lines as $l) {
+        if ($l === '') continue;
+        $cols = str_getcsv($l);
+        $row = []; foreach ($hdr as $i => $h) $row[$h] = $cols[$i] ?? '';
+        $id = trim($row['API_id'] ?? '');
+        if ($id !== '') $out[$id] = $row;
+    }
+    return $out;
+}
+
+/**
+ * Cruises refresh (rare, per season): page the whole cruise catalogue and write
+ * swan-cruises.json. Each cruise id is the API_id used by room-tariffs + the sheet.
+ */
+function lgp_swan_cruises_refresh($dir) {
+    $t0 = microtime(true);
+    $diag = ['operator' => 'swan', 'mode' => 'cruises', 'ok' => false, 'total' => null, 'pages' => 0, 'written' => 0, 'errors' => [], 'secs' => 0];
+    $s = lgp_cfg()['swan'] ?? [];
+    if (empty($s['base'])) { $diag['errors'][] = 'no_base'; return $diag; }
+    $tok = lgp_swan_token();
+    if (!$tok) { $diag['errors'][] = 'token_failed'; return $diag; }
+
+    $keep = ['id', 'name', 'voyage_code', 'motorship', 'dateStart', 'dateEnd', 'duration', 'cityStart', 'cityEnd', 'code'];
+    $all = []; $limit = 50; $offset = 0; $total = null; $guard = 0;
+    while ($guard++ < 100) {
+        list($body, $code, $err) = lgp_json($s['base'] . '/json/v3/cruises?limit=' . $limit . '&offset=' . $offset,
+            ['timeout' => 60, 'headers' => ['Authorization' => 'Bearer ' . $tok]]);
+        if ($err !== null || !is_array($body)) { $diag['errors'][] = "page_offset_{$offset}_failed:$code"; break; }
+        $res = $body['result'] ?? [];
+        if ($total === null) { $total = $res['count'] ?? null; $diag['total'] = $total; }
+        $data = $res['data'] ?? [];
+        if (!is_array($data) || !$data) break;
+        foreach ($data as $c) { $rec = []; foreach ($keep as $k) if (array_key_exists($k, $c)) $rec[$k] = $c[$k]; if (isset($rec['id'])) $all[(string) $rec['id']] = $rec; }
+        $diag['pages']++;
+        $offset += $limit;
+        if ($total !== null && $offset >= $total) break;
+    }
+    $recs = array_values($all);
+    if (!$recs) { $diag['errors'][] = 'no_cruises'; return $diag; }
+    $target = rtrim($dir, '/') . '/swan-cruises.json'; $tmp = $target . '.tmp';
+    if (@file_put_contents($tmp, json_encode($recs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) === false) { $diag['errors'][] = 'write_failed'; return $diag; }
+    @rename($tmp, $target);
+    $diag['written'] = count($recs); $diag['ok'] = true; $diag['secs'] = round(microtime(true) - $t0, 1);
+    return $diag;
+}
+
+function lgp_swan_cruises_status($dir) {
+    $p = rtrim($dir, '/') . '/swan-cruises-meta.json';
+    if (is_readable($p)) { $m = json_decode(file_get_contents($p), true); if (is_array($m)) return $m; }
+    $f = rtrim($dir, '/') . '/swan-cruises.json';
+    $mt = is_readable($f) ? @filemtime($f) : null;
+    return ['last_pull' => $mt ? gmdate('c', $mt) : null, 'report' => null];
+}
+
+/** Cruises refresh + report: new cruise ids not in the sheet, and stale sheet rows. */
+function lgp_swan_cruises_report($dir) {
+    $diag = lgp_swan_cruises_refresh($dir);
+    if (empty($diag['ok'])) return ['ok' => false, 'operator' => 'swan', 'mode' => 'cruises', 'diag' => $diag];
+    $cruises = json_decode(file_get_contents(rtrim($dir, '/') . '/swan-cruises.json'), true);
+    if (!is_array($cruises)) $cruises = [];
+    $sheet = []; foreach (lgp_swan_aids($dir) as $id) $sheet[$id] = true;
+    $rows = lgp_swan_sheet_rows($dir);
+    $catIds = [];
+    $new = [];
+    foreach ($cruises as $c) {
+        $id = (string) ($c['id'] ?? '');
+        if ($id === '') continue;
+        $catIds[$id] = true;
+        if (!isset($sheet[$id])) $new[] = ['id' => $id, 'name' => $c['name'] ?? '', 'ship' => $c['motorship'] ?? '', 'start_date' => $c['dateStart'] ?? '', 'voyage_code' => $c['voyage_code'] ?? ''];
+    }
+    $stale = [];
+    foreach (array_keys($sheet) as $id) if (!isset($catIds[$id])) {
+        $r = $rows[$id] ?? [];
+        $stale[] = ['id' => $id, 'name' => $r['itinerary_name'] ?? ($r['destinations'] ?? ''), 'start_date' => $r['start_date'] ?? ''];
+    }
+    $report = ['ok' => true, 'operator' => 'swan', 'mode' => 'cruises', 'this_pull' => gmdate('c'),
+               'total' => $diag['total'], 'written' => $diag['written'], 'pages' => $diag['pages'],
+               'in_sheet' => count($sheet), 'new_count' => count($new), 'new' => $new,
+               'stale_in_sheet' => $stale, 'secs' => $diag['secs']];
+    @file_put_contents(rtrim($dir, '/') . '/swan-cruises-meta.json', json_encode(['last_pull' => $report['this_pull'], 'report' => $report], JSON_UNESCAPED_SLASHES));
     return $report;
 }

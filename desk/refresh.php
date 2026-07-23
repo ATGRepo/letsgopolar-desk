@@ -37,5 +37,12 @@ if ($op === 'aurora') {
     exit;
 }
 
+if ($op === 'swan') {
+    if ($isPost && $action === 'tariffs') { @set_time_limit(0); echo json_encode(lgp_swan_tariffs_refresh_report($dir)); exit; }
+    if ($isPost && $action === 'cruises') { @set_time_limit(0); echo json_encode(lgp_swan_cruises_report($dir)); exit; }
+    echo json_encode(['tariffs' => lgp_swan_tariffs_status($dir), 'cruises' => lgp_swan_cruises_status($dir)]);
+    exit;
+}
+
 http_response_code(400);
 echo json_encode(['ok' => false, 'error' => 'unknown_op', 'op' => $op]);
