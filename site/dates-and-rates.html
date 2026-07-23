@@ -335,15 +335,18 @@ tbody .c-itin{box-shadow:1px 0 0 var(--line)}
       <div class="field mob-op"><select id="fOpMob"><option value="">All operators</option></select></div>
       <div class="field"><select id="fRegion"><option value="">All regions</option><option>Arctic</option><option>Antarctic</option></select></div>
       <div class="field ms" id="msItin"><button type="button" class="ms-btn" id="msItinBtn" aria-haspopup="listbox" aria-expanded="false">All itineraries</button><div class="ms-panel" id="msItinPanel" hidden></div></div>
-      <div class="field"><select id="fSeason"><option value="">All seasons</option></select></div>
+      <div class="field ms" id="msSeason"><button type="button" class="ms-btn" id="msSeasonBtn" aria-haspopup="listbox" aria-expanded="false">All seasons</button><div class="ms-panel" id="msSeasonPanel" hidden></div></div>
       <div class="field ms" id="msMonth"><button type="button" class="ms-btn" id="msMonthBtn" aria-haspopup="listbox" aria-expanded="false">Any month</button><div class="ms-panel" id="msMonthPanel" hidden></div></div>
-      <div class="field"><select id="fShip"><option value="">All ships</option></select></div>
+      <div class="field ms" id="msShip"><button type="button" class="ms-btn" id="msShipBtn" aria-haspopup="listbox" aria-expanded="false">All ships</button><div class="ms-panel" id="msShipPanel" hidden></div></div>
+      <div class="field ms" id="msEmbark"><button type="button" class="ms-btn" id="msEmbarkBtn" aria-haspopup="listbox" aria-expanded="false">Any embark</button><div class="ms-panel" id="msEmbarkPanel" hidden></div></div>
+      <div class="field ms" id="msDisembark"><button type="button" class="ms-btn" id="msDisembarkBtn" aria-haspopup="listbox" aria-expanded="false">Any disembark</button><div class="ms-panel" id="msDisembarkPanel" hidden></div></div>
       <div class="field"><select id="fDur"><option value="">Any length</option><option value="s">Up to 11 days</option><option value="m">12 to 15 days</option><option value="l">16 days or more</option></select></div>
       <div class="field"><select id="fAvail"><option value="">All availability</option><option value="open">Has open cabins</option></select></div>
       <button class="btn-reset" id="reset">Clear</button>
     </div>
     <div class="tb-row secondary">
       <div class="price-cap"><label>Max from</label><input id="fPrice" type="range" min="0" max="0" step="500"><span class="val mono" id="priceVal"></span></div>
+      <label class="deals-toggle" style="display:inline-flex;align-items:center;gap:6px;font:500 13px Inter;color:var(--ink,#12303f);cursor:pointer;white-space:nowrap"><input type="checkbox" id="fDeals"> Deals only</label>
       <div class="field"><select id="sort">
         <option value="date">Sort: departure date</option>
         <option value="plow">Sort: from-price low to high</option>
@@ -399,31 +402,38 @@ function tripMonth(t){return t.start?Number(t.start.split("-")[1]):0;}
 let OPS=[];
 let OPCOUNT={};
 
-const state={q:"",op:"",ship:"",itins:[],region:"",season:"",months:[],dur:"",avail:"",price:0,sort:"date",view:"table"};
+const state={q:"",op:"",ships:[],itins:[],region:"",seasons:[],months:[],embarks:[],disembarks:[],dur:"",avail:"",dealsOnly:false,price:0,sort:"date",view:"table"};
 
 function shipsFor(op){return [...new Set(source.filter(t=>!op||t.operator===op).map(t=>t.ship).filter(Boolean))].sort();}
-function fillSeasonSelect(){
-  const sel=document.getElementById("fSeason");
+function seasonBtnLabel(){const n=state.seasons.length;const b=document.getElementById("msSeasonBtn");b.textContent=n===0?"All seasons":(n===1?keyLabelShort(state.seasons[0]):n+" seasons");b.classList.toggle("on",n>0);}
+function shipBtnLabel(){const n=state.ships.length;const b=document.getElementById("msShipBtn");b.textContent=n===0?"All ships":(n===1?state.ships[0]:n+" ships");b.classList.toggle("on",n>0);}
+function embarkBtnLabel(){const n=state.embarks.length;const b=document.getElementById("msEmbarkBtn");b.textContent=n===0?"Any embark":(n===1?state.embarks[0]:n+" embark ports");b.classList.toggle("on",n>0);}
+function disembarkBtnLabel(){const n=state.disembarks.length;const b=document.getElementById("msDisembarkBtn");b.textContent=n===0?"Any disembark":(n===1?state.disembarks[0]:n+" disembark ports");b.classList.toggle("on",n>0);}
+function fillSeasonPanel(){
   const pool=source.filter(t=>!state.region||t.region===state.region);
-  const arc=[...new Set(pool.filter(t=>t.region==="Arctic").map(seasonKey))].filter(Boolean).sort();
-  const ant=[...new Set(pool.filter(t=>t.region==="Antarctic").map(seasonKey))].filter(Boolean).sort();
-  let html='<option value="">All seasons</option>';
-  if(state.region==="Arctic"){html+=arc.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("");}
-  else if(state.region==="Antarctic"){html+=ant.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("");}
-  else{
-    if(arc.length)html+=`<optgroup label="Arctic">`+arc.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("")+`</optgroup>`;
-    if(ant.length)html+=`<optgroup label="Antarctica">`+ant.map(k=>`<option value="${k}">${esc(keyLabelShort(k))}</option>`).join("")+`</optgroup>`;
-  }
-  sel.innerHTML=html;
-  const vals=[...sel.querySelectorAll("option")].map(o=>o.value);
-  if(!vals.includes(state.season))state.season="";
-  sel.value=state.season;
+  const keys=[...new Set(pool.map(seasonKey))].filter(Boolean).sort();
+  state.seasons=state.seasons.filter(x=>keys.includes(x));
+  document.getElementById("msSeasonPanel").innerHTML=keys.map(k=>`<label class="ms-opt"><input type="checkbox" value="${esc(k)}"${state.seasons.includes(k)?" checked":""}>${esc(keyLabelShort(k))}</label>`).join("")+MS_ACTIONS;
+  seasonBtnLabel();
 }
-function fillShipSelect(){
-  const sel=document.getElementById("fShip");const ships=shipsFor(state.op);
-  sel.innerHTML='<option value="">All ships</option>'+ships.map(s=>`<option>${esc(s)}</option>`).join("");
-  if(state.ship&&!ships.includes(state.ship))state.ship="";
-  sel.value=state.ship;
+function fillShipPanel(){
+  const ships=shipsFor(state.op);
+  state.ships=state.ships.filter(x=>ships.includes(x));
+  document.getElementById("msShipPanel").innerHTML=ships.map(s=>`<label class="ms-opt"><input type="checkbox" value="${esc(s)}"${state.ships.includes(s)?" checked":""}>${esc(s)}</label>`).join("")+MS_ACTIONS;
+  shipBtnLabel();
+}
+function locsFor(field){return [...new Set(source.filter(t=>!state.region||t.region===state.region).map(t=>t[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));}
+function fillEmbarkPanel(){
+  const locs=locsFor("startLoc");
+  state.embarks=state.embarks.filter(x=>locs.includes(x));
+  document.getElementById("msEmbarkPanel").innerHTML=locs.map(s=>`<label class="ms-opt"><input type="checkbox" value="${esc(s)}"${state.embarks.includes(s)?" checked":""}>${esc(s)}</label>`).join("")+MS_ACTIONS;
+  embarkBtnLabel();
+}
+function fillDisembarkPanel(){
+  const locs=locsFor("endLoc");
+  state.disembarks=state.disembarks.filter(x=>locs.includes(x));
+  document.getElementById("msDisembarkPanel").innerHTML=locs.map(s=>`<label class="ms-opt"><input type="checkbox" value="${esc(s)}"${state.disembarks.includes(s)?" checked":""}>${esc(s)}</label>`).join("")+MS_ACTIONS;
+  disembarkBtnLabel();
 }
 function buildNav(){
   const nav=document.getElementById("opNav");
@@ -446,7 +456,7 @@ function fillItinPanel(){
   itinBtnLabel();
 }
 function fillMonthPanel(){
-  const pool=source.filter(t=>(!state.region||t.region===state.region)&&(!state.season||seasonKey(t)===state.season));
+  const pool=source.filter(t=>(!state.region||t.region===state.region)&&(!state.seasons.length||state.seasons.includes(seasonKey(t))));
   const months=[...new Set(pool.map(tripMonth).filter(Boolean))].sort((a,b)=>a-b).map(String);
   state.months=state.months.filter(x=>months.includes(x));
   document.getElementById("msMonthPanel").innerHTML=months.map(m=>`<label class="ms-opt"><input type="checkbox" value="${m}"${state.months.includes(m)?" checked":""}>${MONNAME[Number(m)-1]}</label>`).join("")+MS_ACTIONS;
@@ -460,8 +470,8 @@ function wireMS(key,apply){
   document.addEventListener("click",e=>{if(ms&&!ms.contains(e.target)&&!panel.hidden){panel.hidden=true;btn.setAttribute("aria-expanded","false");}});
 }
 function initControls(){
-  buildNav();fillShipSelect();
-  fillSeasonSelect();
+  buildNav();fillShipPanel();
+  fillSeasonPanel();fillEmbarkPanel();fillDisembarkPanel();
   fillItinPanel();
   fillMonthPanel();
   document.getElementById("railUpdated").textContent="Updated on "+UPDATED;
@@ -475,10 +485,13 @@ function initControls(){
 
 function match(t){
   if(state.op&&t.operator!==state.op)return false;
-  if(state.ship&&t.ship!==state.ship)return false;
+  if(state.ships.length&&!state.ships.includes(t.ship))return false;
   if(state.itins.length){const cats=itinToks(t.destinations).map(itinCat);if(!state.itins.some(x=>cats.includes(x)))return false;}
   if(state.region&&t.region!==state.region)return false;
-  if(state.season&&seasonKey(t)!==state.season)return false;
+  if(state.seasons.length&&!state.seasons.includes(seasonKey(t)))return false;
+  if(state.embarks.length&&!state.embarks.includes(t.startLoc))return false;
+  if(state.disembarks.length&&!state.disembarks.includes(t.endLoc))return false;
+  if(state.dealsOnly&&!(bestDiscountPct(t)>0))return false;
   if(state.months.length&&!state.months.includes(String(tripMonth(t))))return false;
   if(state.avail==="open"&&t.availCount===0)return false;
   if(state.dur){const d=t.days||0;if(state.dur==="s"&&d>11)return false;if(state.dur==="m"&&(d<12||d>15))return false;if(state.dur==="l"&&d<16)return false;}
@@ -873,10 +886,13 @@ function render(){
 function updatePrintHead(){
   const filtered=source.filter(match);
   const parts=[state.op?state.op:"All operators"];
-  if(state.ship)parts.push("Ship: "+state.ship);
+  if(state.ships.length)parts.push("Ships: "+state.ships.join(", "));
+  if(state.embarks.length)parts.push("Embark: "+state.embarks.join(", "));
+  if(state.disembarks.length)parts.push("Disembark: "+state.disembarks.join(", "));
+  if(state.dealsOnly)parts.push("Deals only");
   if(state.itins.length)parts.push("Itineraries: "+state.itins.join(", "));
   if(state.region)parts.push(state.region);
-  if(state.season)parts.push(keyLabelFull(state.season));
+  if(state.seasons.length)parts.push(state.seasons.map(keyLabelFull).join(", "));
   if(state.months.length)parts.push(state.months.map(m=>MONNAME[Number(m)-1]).join(", "));
   if(state.dur)parts.push({s:"Up to 11 days",m:"12 to 15 days",l:"16+ days"}[state.dur]);
   if(state.avail==="open")parts.push("Open cabins only");
@@ -896,20 +912,19 @@ function measure(){
 }
 
 function doReset(){
-  Object.assign(state,{q:"",ship:"",region:"",season:"",dur:"",avail:"",sort:"date"});state.itins=[];state.months=[];
+  Object.assign(state,{q:"",region:"",dur:"",avail:"",sort:"date",dealsOnly:false});state.itins=[];state.months=[];state.ships=[];state.seasons=[];state.embarks=[];state.disembarks=[];
   const ceil=Number(document.getElementById("fPrice").max);state.price=ceil;
   document.getElementById("q").value="";
-  ["fShip","fRegion","fSeason","fDur","fAvail"].forEach(id=>document.getElementById(id).value="");
+  ["fRegion","fDur","fAvail"].forEach(id=>document.getElementById(id).value="");document.getElementById("fDeals").checked=false;
   document.getElementById("sort").value="date";
   document.getElementById("fPrice").value=ceil;document.getElementById("priceVal").textContent=fmt(ceil);
-  fillShipSelect();fillSeasonSelect();fillItinPanel();fillMonthPanel();render();
+  fillShipPanel();fillSeasonPanel();fillEmbarkPanel();fillDisembarkPanel();fillItinPanel();fillMonthPanel();render();
 }
-function setOp(op){state.op=op;buildNav();fillShipSelect();render();}
+function setOp(op){state.op=op;buildNav();fillShipPanel();render();}
 
 document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;render();});
-document.getElementById("fShip").addEventListener("change",e=>{state.ship=e.target.value;render();});
-document.getElementById("fRegion").addEventListener("change",e=>{state.region=e.target.value;fillSeasonSelect();fillItinPanel();fillMonthPanel();render();});
-document.getElementById("fSeason").addEventListener("change",e=>{state.season=e.target.value;fillMonthPanel();render();});
+document.getElementById("fRegion").addEventListener("change",e=>{state.region=e.target.value;fillSeasonPanel();fillShipPanel();fillEmbarkPanel();fillDisembarkPanel();fillItinPanel();fillMonthPanel();render();});
+document.getElementById("fDeals").addEventListener("change",e=>{state.dealsOnly=e.target.checked;render();});
 document.getElementById("fDur").addEventListener("change",e=>{state.dur=e.target.value;render();});
 document.getElementById("fAvail").addEventListener("change",e=>{state.avail=e.target.value;render();});
 document.getElementById("sort").addEventListener("change",e=>{state.sort=e.target.value;render();});
@@ -1034,10 +1049,14 @@ document.getElementById("sheet").addEventListener("click",e=>{
 window.addEventListener("resize",()=>{measure();});
 wireMS("Itin",vals=>{state.itins=vals;itinBtnLabel();render();});
 wireMS("Month",vals=>{state.months=vals;monthBtnLabel();render();});
+wireMS("Ship",vals=>{state.ships=vals;shipBtnLabel();render();});
+wireMS("Season",vals=>{state.seasons=vals;seasonBtnLabel();fillMonthPanel();render();});
+wireMS("Embark",vals=>{state.embarks=vals;embarkBtnLabel();render();});
+wireMS("Disembark",vals=>{state.disembarks=vals;disembarkBtnLabel();render();});
 // ---- live data boot ----
 // Point this at your PHP proxy on the desk subdomain (same-origin, avoids CORS).
 // During testing you may temporarily set this to the Apps Script /exec URL.
-const DATA_ENDPOINT = "/rate-data.php";
+const DATA_ENDPOINT = "rate-data.php";
 
 function bootWith(trips, updated){
   const incoming = Array.isArray(trips) ? trips : [];
