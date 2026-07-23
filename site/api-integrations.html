@@ -236,28 +236,46 @@
             <h2>Swan Hellenic</h2>
           </div>
         </div>
-        <span class="pill" id="swPill">Awaiting files</span>
+        <span class="pill" id="swPill">Live API</span>
       </div>
-      <p class="desc">Swan isn&rsquo;t connected to a live API yet. Upload the Swan room-tariffs <b>ZIP</b> (one JSON per departure, as downloaded) together with the Swan &ldquo;LGP Links&rdquo; CSV. The zip is unpacked and slimmed in your browser, then published. Standard <i>Cruise Plus</i> fares go to Dates and Rates; <i>Flash</i> and <i>Solo</i> fares populate the Closed Market Deals page. Matching is by trip id &harr; API_id.</p>
-      <div class="qk-uploads">
-        <label class="qk-file"><span class="qk-lab">Room tariffs (ZIP)</span><span class="qk-hint" id="swZipName">ZIP &middot; not selected</span><input type="file" id="swZipInput" accept=".zip,application/zip"></label>
-        <label class="qk-file"><span class="qk-lab">LGP Links (Swan)</span><span class="qk-hint" id="swLinksName">CSV &middot; not selected</span><input type="file" id="swLinksInput" accept=".csv,text/csv"></label>
+      <p class="desc">Swan rates now come <strong>live from Swan Hellenic&rsquo;s API</strong>. <strong>Room tariffs</strong> pulls current prices for the cruise ids in your LGP sheet (run often). <strong>Cruises</strong> pulls the whole catalogue to find new cruise ids (run rarely). Standard Cruise Plus (double) goes to Dates and Rates; Flash and Solo promos go to Closed Market. Any new tariff family is flagged for your review before publishing.</p>
+
+      <div id="swNewTariffs"></div>
+
+      <div class="qk-sub">
+        <h3 class="qk-subh">Room tariffs (rates)</h3>
+        <p class="desc">Pulls live tariffs for every cruise id in the Swan LGP sheet: Cruise Plus double to Dates and Rates, Flash and Solo to Closed Market.</p>
+        <div class="actions">
+          <button class="btn" id="swTarRefresh">Refresh Swan rates (Room tariffs)</button>
+          <span class="linksmeta" id="swTarStatus">Checking last pull&hellip;</span>
+        </div>
+        <div class="msg" id="swTarMsg"></div>
+        <div id="swTarReport"></div>
+        <div id="swMapping"></div>
       </div>
-      <div class="statrow">
-        <div class="stat"><b id="swTotal">&ndash;</b><span>Departures in zip</span></div>
-        <div class="stat"><b id="swMatched">&ndash;</b><span>Standard &rarr; dashboard</span></div>
-        <div class="stat"><b id="swFlash">&ndash;</b><span>Flash deals</span></div>
-        <div class="stat"><b id="swSolo">&ndash;</b><span>Solo deals</span></div>
-        <div class="stat"><b id="swMiss">&ndash;</b><span>Not in links sheet</span></div>
+
+      <div class="qk-sub">
+        <h3 class="qk-subh">Cruises (catalogue, per season)</h3>
+        <p class="desc">Pulls Swan&rsquo;s full cruise catalogue and lists cruise ids not yet in your LGP sheet.</p>
+        <div class="actions">
+          <button class="btn" id="swCruRefresh">Refresh Swan Cruises</button>
+          <span class="linksmeta" id="swCruStatus">Checking last pull&hellip;</span>
+        </div>
+        <div class="msg" id="swCruMsg"></div>
+        <div id="swCruReport"></div>
       </div>
-      <div class="linksmeta" id="swMeta"></div>
-      <div id="swWarn"></div>
-      <div class="actions">
-        <button class="btn" id="swPublish" disabled>Publish to Dates and Rates + Closed Market</button>
-        <button class="btn ghost" id="swDownload" disabled>Download not-in-links report</button>
+
+      <div class="qk-sub">
+        <h3 class="qk-subh">LGP Links (Swan)</h3>
+        <p class="desc">Maps each cruise id (API_id) to its letsgopolar.com page. Export the Swan &ldquo;LGP Links&rdquo; sheet as CSV and upload it here.</p>
+        <div class="qk-uploads">
+          <label class="qk-file"><span class="qk-lab">LGP Links (Swan)</span><span class="qk-hint" id="swLinksName">CSV &middot; not selected</span><input type="file" id="swLinksInput" accept=".csv,text/csv"></label>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="swLinksUpload" disabled>Upload LGP Links CSV</button>
+        </div>
+        <div class="msg" id="swLinksMsg"></div>
       </div>
-      <div class="msg" id="swMsg"></div>
-      <div id="swTable"></div>
     </div>
 
     <div class="intg" id="wpaudit">
@@ -626,155 +644,88 @@
       renderMapping();
     })();
   })();
-  /* ---------------- Swan publish (zip of per-trip JSON + links CSV -> server -> dashboard + closed market) ---------------- */
+  /* ---------------- Swan Hellenic (live API: Room tariffs + Cruises) ---------------- */
   (function(){
-    const KNOWN=new Set(['Cruise Plus','CRS Cruise Plus','Cruise Only','CRS Cruise Only',
-      'Arctic Flash Cruise Plus','Arctic Flash Cruise Only','Swan Flash Cruise Plus','Swan Flash Cruise Only',
-      'Swan Solo Cruise Plus','Swan Solo Cruise Only']);
-    const baseTariff=n=>String(n||"").replace(/\s*\((Child|Extra)\)\s*$/,"").trim();
-    let zipFile=null, linksFile=null, swMissing=[];
-    const ready=()=>{ $("swPublish").disabled=!(zipFile&&linksFile); };
-
-    $("swZipInput").addEventListener("change", e=>{
-      const f=e.target.files&&e.target.files[0]; if(!f) return;
-      zipFile=f; $("swZipName").textContent="ZIP \u00b7 "+f.name;
-      $("swZipInput").closest(".qk-file").classList.add("ok"); ready();
-    });
-    $("swLinksInput").addEventListener("change", e=>{
-      const f=e.target.files&&e.target.files[0]; if(!f) return;
-      linksFile=f; $("swLinksName").textContent="CSV \u00b7 "+f.name;
-      $("swLinksInput").closest(".qk-file").classList.add("ok"); ready();
-    });
-
-    async function post(url, file, filename){
-      const fd=new FormData(); fd.append("file", file, filename||file.name||"upload");
-      const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),30000);
-      let r;
-      try{ r=await fetch(url,{method:"POST",body:fd,cache:"no-store",signal:ctrl.signal}); }
-      catch(e){ clearTimeout(timer); if(e.name==="AbortError") throw new Error("timed out after 30s contacting "+url); throw new Error("network error contacting "+url+" ("+(e.message||"failed")+")"); }
-      clearTimeout(timer);
-      if(r.status===404) throw new Error("endpoint not found (404): "+url+" — upload this PHP file to the desk folder.");
-      if(!r.ok) throw new Error("server returned HTTP "+r.status+" from "+url);
-      const text=await r.text();
-      try{ return JSON.parse(text); }catch(e){ throw new Error("unexpected non-JSON response from "+url+" (first bytes: "+text.slice(0,60).replace(/\s+/g," ")+")"); }
+    const fmt = iso => { if(!iso) return "never"; const d=new Date(iso); return isNaN(d)?iso:d.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+    const money = n => (n==null) ? "" : "$"+Number(n).toLocaleString();
+    function tbl(cols, rows){ let t='<table class="miss"><thead><tr>'+cols.map(c=>'<th>'+esc(c.h)+'</th>').join("")+'</tr></thead><tbody>'; rows.slice(0,100).forEach(x=>{ t+='<tr>'+cols.map(c=>'<td>'+esc(c.f(x))+'</td>').join("")+'</tr>'; }); t+='</tbody></table>'; if(rows.length>100)t+='<p class="linksmeta">Showing first 100 of '+rows.length+'.</p>'; return t; }
+    function renderNewTariffs(nt){
+      const box=$("swNewTariffs"); if(!box) return;
+      if(!nt || !nt.length){ box.innerHTML=""; return; }
+      let h='<div style="border:1px solid #d9a441;background:#fdf5e6;border-radius:10px;padding:12px 14px;margin-top:12px">';
+      h+='<b style="color:#8a5a00">New Swan tariff families detected ('+nt.length+')</b><p class="linksmeta" style="margin:4px 0 8px">Not yet recognised. Review before deciding whether to add to Closed Market deals. Nothing is published automatically.</p>';
+      h+=tbl([{h:'Tariff family',f:x=>x.tariff},{h:'Cruises',f:x=>(x.cruise_ids||[]).length},{h:'Sample room',f:x=>x.sample&&x.sample.room},{h:'Double',f:x=>x.sample&&x.sample.double?money(x.sample.double.disc):""},{h:'Single',f:x=>x.sample&&x.sample.single?money(x.sample.single.disc):""}], nt);
+      h+='</div>';
+      box.innerHTML=h;
     }
-
-    // Slim one Swan trip file to {id, rooms:[{name, avail, tariffs:{name:{full,disc}}}]}
-    function slimTrip(d){
-      const res=d.result||{}; const rooms=[];
-      for(const deck of (res.decks||[])){
-        for(const rc of (deck.roomClasses||[])){
-          const tariffs={};
-          for(const t of (rc.tariffs||[])){
-            for(const acc of (t.accommodations||[])){
-              const nm=acc.name||""; if(nm==="") continue;
-              const pr=acc.price||{};
-              const full=(typeof pr.value==="number")?pr.value/100:null;
-              const disc=(typeof pr.discountedValue==="number")?pr.discountedValue/100:full;
-              // acc.id 1 = Single (per-person, sole occupancy), 2 = Double (per-person, shared)
-              const occ=(acc.id===1)?"single":(acc.id===2)?"double":("id"+acc.id);
-              if(!tariffs[nm]) tariffs[nm]={};
-              if(!(occ in tariffs[nm])) tariffs[nm][occ]={full,disc};
-            }
-          }
-          rooms.push({name:rc.name||"", avail:(typeof rc.availability==="number"?rc.availability:0), tariffs});
-        }
-      }
-      return {id:d.id, rooms};
+    function renderTarReport(r){
+      const box=$("swTarReport"); if(!r){ box.innerHTML=""; return; }
+      if(r.ok===false){ box.innerHTML='<p class="msg">Refresh failed: '+esc((r.diag&&r.diag.errors&&r.diag.errors.join(", "))||"unknown error")+'</p>'; renderNewTariffs([]); return; }
+      const chip=(l,v)=>'<div class="stat"><b>'+esc(v==null?"-":v)+'</b><span>'+esc(l)+'</span></div>';
+      let h='<div class="statrow">'+chip('Cruise ids',r.ids)+chip('Trips before',r.old_count)+chip('Trips now',r.new_count)+chip('Price changes',(r.price_changes||[]).length)+chip('Fetch failures',r.fetch_failures)+'</div>';
+      h+='<p class="linksmeta">Previous pull '+esc(fmt(r.prev_pull))+' &rarr; this pull '+esc(fmt(r.this_pull))+(r.secs!=null?' &middot; '+esc(r.secs)+'s':'')+'</p>';
+      if((r.price_changes||[]).length){ h+=lgpCollapsible("Price changes ("+r.price_changes.length+")", tbl([{h:'Cruise id',f:x=>x.id},{h:'Was',f:x=>money(x.old_from)},{h:'Now',f:x=>money(x.new_from)},{h:'Change',f:x=>(x.delta>0?'+':'')+money(x.delta)}], r.price_changes), false); }
+      box.innerHTML=h;
+      renderNewTariffs(r.new_tariffs||[]);
     }
-
-    $("swPublish").addEventListener("click", async ()=>{
-      if(!(zipFile&&linksFile)) return;
-      if(typeof JSZip==="undefined"){ $("swMsg").innerHTML='<span style="color:#b4552d;font-weight:600">Unzip library didn\u2019t load.</span> Check your connection and refresh.'; return; }
-      $("swMsg").textContent="Unpacking the zip...";
-      $("swTable").innerHTML=""; $("swWarn").innerHTML=""; $("swDownload").disabled=true;
-      try{
-        const zip=await JSZip.loadAsync(zipFile);
-        const entries=Object.values(zip.files).filter(f=>!f.dir && /\.json$/i.test(f.name));
-        if(!entries.length){ $("swMsg").textContent="No .json files found inside the zip."; return; }
-        $("swMsg").textContent="Slimming "+entries.length+" departures...";
-        const slim=[]; const newTariffs=new Set();
-        for(const ent of entries){
-          let d; try{ d=JSON.parse(await ent.async("string")); }catch(e){ continue; }
-          const st=slimTrip(d); slim.push(st);
-          for(const r of st.rooms) for(const tn in r.tariffs){ if(!KNOWN.has(baseTariff(tn))) newTariffs.add(tn); }
-        }
-        // Surface any unrecognized tariff family before/after publishing.
-        if(newTariffs.size){
-          $("swWarn").innerHTML='<div class="warnbox"><b>New tariff in meta_name found:</b> '+[...newTariffs].map(esc).join(", ")+'. Review whether this is a new deal type to add to the Closed Market page.</div>';
-        }
-        const blob=new Blob([JSON.stringify(slim)],{type:"application/json"});
-        $("swMsg").textContent="Slimmed to "+(blob.size/1024/1024).toFixed(2)+" MB. Uploading...";
-
-        const up1=await post("/upload-swan-links.php", linksFile);
-        if(!up1.ok){ $("swMsg").textContent="Links upload rejected: "+(up1.error||"error"); return; }
-        const up2=await post("/upload-swan-trips.php", blob, "swan-trips.json");
-        if(!up2.ok){ $("swMsg").textContent="Trips upload rejected: "+(up2.error||"error"); return; }
-
-        $("swMsg").textContent="Files saved. Building the dashboard feed...";
-        const r=await fetch(ENDPOINT+"?nocache=1",{cache:"no-store"});
-        const data=await r.json();
-        const diag=data.swanDiag||{};
-        swMissing=Array.isArray(data.swanMissing)?data.swanMissing:[];
-        const serverNew=Array.isArray(data.swanNewTariffs)?data.swanNewTariffs:[];
-
-        $("swTotal").textContent=diag.trips_count||slim.length;
-        $("swMatched").textContent=diag.mapped_count||0;
-        $("swFlash").textContent=diag.flash_count||0;
-        $("swSolo").textContent=diag.solo_count||0;
-        $("swMiss").textContent=diag.missing_count!=null?diag.missing_count:swMissing.length;
-        $("swDownload").disabled=!swMissing.length;
-
-        if(diag.published){
-          const dt=new Date(diag.published); const when=isNaN(dt)?diag.published:dt.toLocaleString();
-          $("swMeta").innerHTML=`Last published <b>${esc(when)}</b> &middot; ${diag.mapped_count||0} standard, ${diag.flash_count||0} flash, ${diag.solo_count||0} solo &middot; ${diag.links_count||0} rows in links sheet`;
-        }
-        // Prefer the server's authoritative new-tariff list if present.
-        if(serverNew.length){
-          $("swWarn").innerHTML='<div class="warnbox"><b>New tariff in meta_name found:</b> '+serverNew.map(esc).join(", ")+'. Review whether this is a new deal type to add to the Closed Market page.</div>';
-        }
-        if(diag.error){
-          $("swMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Processed with an issue:</span> ${esc(diag.error)}.`;
-        } else {
-          $("swMsg").innerHTML=`<span style="color:#2f8b6f;font-weight:600">Published ${diag.mapped_count||0} standard Swan trips</span> to Dates and Rates, plus ${diag.flash_count||0} Flash and ${diag.solo_count||0} Solo deals to Closed Market. ${diag.missing_count||0} not in the links sheet${(diag.missing_count||0)?" (listed below)":""}.`;
-        }
-
-        if(swMissing.length){
-          const rows=swMissing.map(m=>`<tr><td>${esc(m.id)}</td></tr>`).join("");
-          $("swTable").innerHTML=`<p class="msg">${swMissing.length} departures in the zip have no row in the Swan links sheet (matched by API_id).</p>
-            <table class="miss"><thead><tr><th>Trip id (API_id)</th></tr></thead><tbody>${rows}</tbody></table>`;
-        }
-      }catch(err){
-        $("swMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Publish failed:</span> ${esc(err.message||"unknown error")}`;
-      }
-    });
-
-    // On load, surface last publish state if Swan data is already live.
-    (async ()=>{
-      try{
-        const r=await fetch(ENDPOINT,{cache:"no-store"});
-        const data=await r.json();
-        const diag=data.swanDiag||{};
-        if(diag.published){
-          const dt=new Date(diag.published); const when=isNaN(dt)?diag.published:dt.toLocaleString();
-          $("swTotal").textContent=diag.trips_count||0;
-          $("swMatched").textContent=diag.mapped_count||0;
-          $("swFlash").textContent=diag.flash_count||0;
-          $("swSolo").textContent=diag.solo_count||0;
-          $("swMiss").textContent=diag.missing_count!=null?diag.missing_count:0;
-          $("swMeta").innerHTML=`Last published <b>${esc(when)}</b> &middot; ${diag.mapped_count||0} standard, ${diag.flash_count||0} flash, ${diag.solo_count||0} solo &middot; ${diag.links_count||0} rows in links sheet`;
-          const serverNew=Array.isArray(data.swanNewTariffs)?data.swanNewTariffs:[];
-          if(serverNew.length){ $("swWarn").innerHTML='<div class="warnbox"><b>New tariff in meta_name found:</b> '+serverNew.map(esc).join(", ")+'.</div>'; }
-        }
+    async function renderMapping(){
+      const box=$("swMapping"); if(!box) return;
+      try{ const data=await (await fetch("rate-data.php",{cache:"no-store"})).json();
+        const d=data.swanDiag||{}; const missing=Array.isArray(data.swanMissing)?data.swanMissing:[];
+        const chip=(l,v)=>'<div class="stat"><b>'+esc(v==null?"-":v)+'</b><span>'+esc(l)+'</span></div>';
+        let h='<div class="statrow">'+chip('Standard mapped',d.mapped_count)+chip('Flash deals',d.flash_count)+chip('Solo deals',d.solo_count)+chip('Missing link',d.missing_count)+'</div>';
+        if(missing.length){ h+=lgpCollapsible("Not in links sheet ("+missing.length+")", tbl([{h:'Cruise id (API_id)',f:x=>x.id}], missing), false); }
+        box.innerHTML=h;
       }catch(e){}
-    })();
-
-    $("swDownload").addEventListener("click", ()=>{
-      if(!swMissing.length) return;
-      const lines=["API_id"]; swMissing.forEach(m=>lines.push(String(m.id)));
-      const blob=new Blob([lines.join("\n")],{type:"text/csv"});
-      const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="swan-not-in-links.csv";a.click();URL.revokeObjectURL(a.href);
+    }
+    $("swTarRefresh").addEventListener("click", async ()=>{
+      const b=$("swTarRefresh"),o=b.textContent; b.disabled=true; b.textContent="Pulling tariffs, about 30s…";
+      $("swTarMsg").textContent="Pulling Swan room tariffs for every cruise id in the sheet. Please wait.";
+      try{ const rep=await (await fetch("refresh.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"op=swan&action=tariffs",cache:"no-store"})).json();
+        renderTarReport(rep);
+        if(rep.ok===false){ $("swTarMsg").textContent="Refresh failed. See details above."; }
+        else { $("swTarMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Done. '+esc(rep.new_count)+' trips in '+esc(rep.secs||"?")+'s'+(rep.fetch_failures?(', '+esc(rep.fetch_failures)+' failed'):'')+'.</span>'; $("swTarStatus").textContent="Last rates pull: "+fmt(rep.this_pull); try{ await fetch("rate-data.php?nocache=1",{cache:"no-store"}); }catch(_){} renderMapping(); }
+      }catch(e){ $("swTarMsg").textContent="Refresh error: "+e.message; }
+      finally{ b.disabled=false; b.textContent=o; }
     });
+    function renderCruReport(r){
+      const box=$("swCruReport"); if(!r){ box.innerHTML=""; return; }
+      if(r.ok===false){ box.innerHTML='<p class="msg">Cruises refresh failed: '+esc((r.diag&&r.diag.errors&&r.diag.errors.join(", "))||"unknown error")+'</p>'; return; }
+      const chip=(l,v)=>'<div class="stat"><b>'+esc(v==null?"-":v)+'</b><span>'+esc(l)+'</span></div>';
+      let h='<div class="statrow">'+chip('Catalogue total',r.total)+chip('In your sheet',r.in_sheet)+chip('Not in sheet',r.new_count)+chip('Stale in sheet',(r.stale_in_sheet||[]).length)+'</div>';
+      h+='<p class="linksmeta">Pulled '+esc(fmt(r.this_pull))+(r.secs!=null?' &middot; '+esc(r.secs)+'s':'')+'</p>';
+      const nw=r.new||[]; const today=new Date().toISOString().slice(0,10);
+      const future=nw.filter(x=> !x.start_date || String(x.start_date).slice(0,10)>=today);
+      const mkDl=(rows,name)=>()=>{ const q=s=>{const v=String(s==null?"":s);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}; const head=["API_id","lgp_links","itinerary_name","ship","start_date","voyage_code"]; const lines=[head.join(",")]; rows.forEach(x=>lines.push([q(x.id),q(""),q(x.name),q(x.ship),q(x.start_date),q(x.voyage_code)].join(","))); const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href); };
+      if(nw.length){ const cols=[{h:'Cruise id',f:x=>x.id},{h:'Itinerary',f:x=>x.name},{h:'Ship',f:x=>x.ship},{h:'Start',f:x=>x.start_date}]; let body='<div class="actions" style="margin:2px 0 8px"><button class="btn ghost" id="swCruDlFuture">Download upcoming ('+future.length+')</button><button class="btn ghost" id="swCruDlAll">Download all ('+nw.length+')</button></div>'; body+='<p class="linksmeta">Showing upcoming only. '+(nw.length-future.length)+' past hidden but in "Download all".</p>'; body+=tbl(cols,future); h+=lgpCollapsible("New cruise ids not in sheet ("+future.length+" upcoming)", body, false); }
+      if((r.stale_in_sheet||[]).length){ h+=lgpCollapsible("Sheet cruise ids no longer in catalogue ("+r.stale_in_sheet.length+")", tbl([{h:'Cruise id',f:x=>x.id},{h:'Itinerary',f:x=>x.name},{h:'Departure',f:x=>x.start_date}], r.stale_in_sheet), false); }
+      box.innerHTML=h;
+      const bf=$("swCruDlFuture"); if(bf) bf.addEventListener("click", mkDl(future,"swan-new-upcoming.csv"));
+      const ba=$("swCruDlAll"); if(ba) ba.addEventListener("click", mkDl(nw,"swan-new-all.csv"));
+    }
+    $("swCruRefresh").addEventListener("click", async ()=>{
+      const b=$("swCruRefresh"),o=b.textContent; b.disabled=true; b.textContent="Pulling catalogue, about 15s…";
+      $("swCruMsg").textContent="Pulling Swan's full cruise catalogue. Please wait.";
+      try{ const rep=await (await fetch("refresh.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"op=swan&action=cruises",cache:"no-store"})).json();
+        renderCruReport(rep);
+        if(rep.ok===false){ $("swCruMsg").textContent="Refresh failed. See details above."; }
+        else { $("swCruMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Done. '+esc(rep.total)+' cruises, '+esc(rep.new_count)+' not in sheet.</span>'; $("swCruStatus").textContent="Last catalogue pull: "+fmt(rep.this_pull); }
+      }catch(e){ $("swCruMsg").textContent="Refresh error: "+e.message; }
+      finally{ b.disabled=false; b.textContent=o; }
+    });
+    (function(){ let file=null;
+      $("swLinksInput").addEventListener("change", e=>{ file=(e.target.files&&e.target.files[0])||null; $("swLinksName").textContent=file?("CSV · "+file.name):"CSV · not selected"; $("swLinksUpload").disabled=!file; });
+      $("swLinksUpload").addEventListener("click", async ()=>{ if(!file)return; $("swLinksMsg").textContent="Uploading links CSV…"; try{ const fd=new FormData(); fd.append("file",file,file.name); const r=await fetch("upload-swan-links.php",{method:"POST",body:fd,cache:"no-store"}); const j=await r.json().catch(()=>({})); if(r.ok&&j.ok!==false){ $("swLinksMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Links uploaded.</span> Run a Room tariffs refresh to re-match.'; } else { $("swLinksMsg").textContent="Upload rejected: "+(j.error||("HTTP "+r.status)); } }catch(e){ $("swLinksMsg").textContent="Upload error: "+e.message; } });
+    })();
+    (async function(){ try{ const s=await (await fetch("refresh.php?op=swan",{cache:"no-store"})).json();
+        $("swTarStatus").textContent="Last rates pull: "+fmt(s.tariffs&&s.tariffs.last_pull);
+        if(s.tariffs&&s.tariffs.report) renderTarReport(s.tariffs.report);
+        $("swCruStatus").textContent="Last catalogue pull: "+fmt(s.cruises&&s.cruises.last_pull);
+        if(s.cruises&&s.cruises.report) renderCruReport(s.cruises.report);
+        $("swPill").className="pill"; $("swPill").textContent="Live API";
+      }catch(e){ $("swTarStatus").textContent="Could not read status."; }
+      renderMapping();
+    })();
   })();
   /* ---------------- WordPress vs Dashboard price audit ---------------- */
   (function(){
