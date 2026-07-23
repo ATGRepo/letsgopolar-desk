@@ -277,12 +277,37 @@
       </div>
     </div>
 
-    <div class="intg" id="wpaudit">
+    <div class="intg" id="wpaudit-live">
       <div class="intg-head">
         <div class="intg-title">
           <div>
             <div class="op">Data check</div>
-            <h2>WordPress vs Dashboard price audit</h2>
+            <h2>WordPress vs Dashboard audit (live)</h2>
+          </div>
+        </div>
+        <span class="pill live">Live</span>
+      </div>
+      <p class="desc">Reads the website&rsquo;s published trips <b>live from the database</b> and compares them against the dashboard feed &mdash; no export needed. It matches trips by website link, then by ship + departure date, and compares <b>each cabin</b> by name. Results split into real <b>price differences</b>, lower-confidence <b>availability flags</b> (sold out, or a cabin not offered on that sailing), trips on the <b>website but not the dashboard</b>, and dashboard departures with <b>no published website page</b>. Run it any time; it always reads current data.</p>
+      <div class="statrow">
+        <div class="stat"><b id="laPrice">&ndash;</b><span>Price differences</span></div>
+        <div class="stat"><b id="laAvail">&ndash;</b><span>Availability flags</span></div>
+        <div class="stat"><b id="laWpOnly">&ndash;</b><span>Website not in dashboard</span></div>
+        <div class="stat"><b id="laOrphan">&ndash;</b><span>Dashboard, no website page</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="laRun">Run audit</button>
+        <button class="btn ghost" id="laCsv" disabled>Download all as CSV</button>
+      </div>
+      <div class="msg" id="laMsg"></div>
+      <div id="laReport"></div>
+    </div>
+
+    <div class="intg" id="wpaudit">
+      <div class="intg-head">
+        <div class="intg-title">
+          <div>
+            <div class="op">Data check &middot; fallback</div>
+            <h2>WordPress vs Dashboard price audit (CSV upload)</h2>
           </div>
         </div>
         <span class="pill">Tool</span>
@@ -826,6 +851,74 @@
       L.push("|---|---|---|---|---|");
       result.unmatched_trips.forEach(d=>L.push(`| ${d.supplier} | ${d.title} | ${d.ship} | ${d.start} | ${d.lgp} |`));
       dl("wp-price-audit.md", L.join("\n"), "text/markdown");
+    });
+  })();
+
+  /* ---------------- WordPress vs Dashboard audit (live DB read) ---------------- */
+  (function(){
+    const esc = s => String(s==null?"":s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    let last = null;
+    function tbl(arr, cols){
+      let t = '<table class="miss"><tr>'+cols.map(c=>'<th>'+esc(c.h)+'</th>').join("")+'</tr>';
+      arr.slice(0,200).forEach(x => { t += '<tr>'+cols.map(c=>'<td>'+c.f(x)+'</td>').join("")+'</tr>'; });
+      t += '</table>';
+      if(arr.length>200) t += '<p class="linksmeta">Showing first 200 of '+arr.length+'. Use Download CSV for all.</p>';
+      return t;
+    }
+    const lgpCell = x => x.lgp ? '<a href="'+esc(x.lgp)+'" target="_blank" rel="noopener">open</a>' : '';
+    function render(r){
+      const box=$("laReport");
+      if(r.ok===false){ box.innerHTML='<p class="msg">Audit failed: '+esc(r.error||"unknown error")+'</p>'; return; }
+      const s=r.summary;
+      $("laPrice").textContent=s.price_mismatches;
+      $("laAvail").textContent=s.availability_flags;
+      $("laWpOnly").textContent=s.wp_not_in_dashboard;
+      $("laOrphan").textContent=s.dashboard_orphans;
+      let h='<p class="linksmeta">Compared <b>'+s.wp_publish_upcoming+'</b> published upcoming website trips against <b>'+s.feed_trips+'</b> feed sailings &middot; generated '+esc(new Date(r.generated).toLocaleString())+'</p>';
+      if(r.price_mismatches.length) h+=lgpCollapsible("Price differences ("+r.price_mismatches.length+")", tbl(r.price_mismatches,[{h:'Operator',f:x=>esc(x.op)},{h:'Departure',f:x=>esc(x.start)},{h:'Trip',f:x=>esc(x.trip)},{h:'Cabin',f:x=>esc(x.cabin)},{h:'Issue',f:x=>esc(x.issue)},{h:'Page',f:lgpCell}]), false);
+      if(r.availability_flags.length) h+=lgpCollapsible("Availability flags ("+r.availability_flags.length+")", tbl(r.availability_flags,[{h:'Operator',f:x=>esc(x.op)},{h:'Departure',f:x=>esc(x.start)},{h:'Trip',f:x=>esc(x.trip)},{h:'Cabin',f:x=>esc(x.cabin)},{h:'Flag',f:x=>esc(x.issue)},{h:'Page',f:lgpCell}]), false);
+      if(r.wp_not_in_dashboard.length) h+=lgpCollapsible("Website trips not in the dashboard ("+r.wp_not_in_dashboard.length+")", tbl(r.wp_not_in_dashboard,[{h:'Supplier',f:x=>esc(x.supplier)},{h:'Departure',f:x=>esc(x.start)},{h:'Ship',f:x=>esc(x.ship)},{h:'Trip',f:x=>esc(x.trip)},{h:'Page',f:lgpCell}]), false);
+      if(r.dashboard_orphans.length) h+=lgpCollapsible("Dashboard trips with no published website page ("+r.dashboard_orphans.length+")", tbl(r.dashboard_orphans,[{h:'Operator',f:x=>esc(x.op)},{h:'Departure',f:x=>esc(x.start)},{h:'Ship',f:x=>esc(x.ship)},{h:'Itinerary',f:x=>esc(x.itinerary)},{h:'Note',f:x=>esc(x.note)}]), false);
+      const hygiene=(r.past_still_published.length+r.bad_dates.length+r.no_cabins.length+r.no_prices.length);
+      if(hygiene){
+        let hb='';
+        if(r.past_still_published.length) hb+='<h4 class="qk-subh">Past departures still published ('+r.past_still_published.length+')</h4>'+tbl(r.past_still_published,[{h:'Supplier',f:x=>esc(x.supplier)},{h:'Departure',f:x=>esc(x.start)},{h:'Trip',f:x=>esc(x.trip)},{h:'Page',f:lgpCell}]);
+        if(r.bad_dates.length) hb+='<h4 class="qk-subh">Return before departure ('+r.bad_dates.length+')</h4>'+tbl(r.bad_dates,[{h:'Departure',f:x=>esc(x.start)},{h:'Return',f:x=>esc(x.return)},{h:'Trip',f:x=>esc(x.trip)},{h:'Page',f:lgpCell}]);
+        if(r.no_cabins.length) hb+='<h4 class="qk-subh">Published with no cabins ('+r.no_cabins.length+')</h4>'+tbl(r.no_cabins,[{h:'Departure',f:x=>esc(x.start)},{h:'Trip',f:x=>esc(x.trip)},{h:'Page',f:lgpCell}]);
+        if(r.no_prices.length) hb+='<h4 class="qk-subh">Published with cabins but no prices ('+r.no_prices.length+')</h4>'+tbl(r.no_prices,[{h:'Departure',f:x=>esc(x.start)},{h:'Trip',f:x=>esc(x.trip)},{h:'Page',f:lgpCell}]);
+        h+=lgpCollapsible("Website hygiene ("+hygiene+")", hb, false);
+      }
+      if(s.feed_no_lgp_link) h+='<p class="linksmeta">Context: '+s.feed_no_lgp_link+' feed departures have no LGP link mapped (link backlog, shown on the operator cards).</p>';
+      box.innerHTML=h;
+    }
+    function csvEsc(v){const s=String(v==null?"":v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+    function buildCsv(r){
+      const L=[];
+      const sec=(name,arr,cols)=>{arr.forEach(x=>L.push([name,...cols.map(c=>csvEsc(c(x)))].join(",")));};
+      L.push("section,operator_or_supplier,departure,ship,trip_or_itinerary,cabin,issue,page");
+      sec("price_difference",r.price_mismatches,[x=>x.op,x=>x.start,x=>x.ship,x=>x.trip,x=>x.cabin,x=>x.issue,x=>x.lgp]);
+      sec("availability_flag",r.availability_flags,[x=>x.op,x=>x.start,x=>x.ship,x=>x.trip,x=>x.cabin,x=>x.issue,x=>x.lgp]);
+      sec("website_not_in_dashboard",r.wp_not_in_dashboard,[x=>x.supplier,x=>x.start,x=>x.ship,x=>x.trip,x=>"",x=>"",x=>x.lgp]);
+      sec("dashboard_orphan",r.dashboard_orphans,[x=>x.op,x=>x.start,x=>x.ship,x=>x.itinerary,x=>"",x=>x.note,x=>""]);
+      sec("past_still_published",r.past_still_published,[x=>x.supplier,x=>x.start,x=>x.ship,x=>x.trip,x=>"",x=>"",x=>x.lgp]);
+      sec("bad_dates",r.bad_dates,[x=>x.supplier,x=>x.start,x=>x.ship,x=>x.trip,x=>"",x=>"return "+x.return,x=>x.lgp]);
+      return L.join("\n");
+    }
+    $("laRun").addEventListener("click", async ()=>{
+      const b=$("laRun"),o=b.textContent; b.disabled=true; b.textContent="Reading website + feed…";
+      $("laMsg").textContent="Running the live audit. This reads the website database and the dashboard feed.";
+      try{
+        const r=await (await fetch("wp-audit.php",{cache:"no-store"})).json();
+        last=r; render(r);
+        if(r.ok===false){ $("laMsg").textContent="Audit failed. See details above."; $("laCsv").disabled=true; }
+        else { const s=r.summary; $("laMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Done.</span> '+s.price_mismatches+' price differences, '+s.availability_flags+' availability flags, '+s.wp_not_in_dashboard+' website-only, '+s.dashboard_orphans+' dashboard orphans.'; $("laCsv").disabled=false; }
+      }catch(e){ $("laMsg").textContent="Audit error: "+e.message+" (is wp-audit.php deployed next to rate-data.php?)"; }
+      finally{ b.disabled=false; b.textContent=o; }
+    });
+    $("laCsv").addEventListener("click", ()=>{
+      if(!last) return;
+      const blob=new Blob([buildCsv(last)],{type:"text/csv"});
+      const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="wp-dashboard-audit.csv"; a.click(); URL.revokeObjectURL(a.href);
     });
   })();
   </script>

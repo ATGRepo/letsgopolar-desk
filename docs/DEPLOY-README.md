@@ -8,7 +8,12 @@ Two folders. Upload the **contents** of each to the matching place on the server
 All the PHP endpoints, the Apps Script, and the setup notes:
 - `rate-data.php` — the proxy/merge (Oceanwide + Quark + Aurora + Swan + Quark CMD)
 - `cabin-alias-map.php` — cabin-name aliases used by the price audit (NEW)
-- `wp-price-audit.php` — WordPress vs dashboard per-cabin price audit
+- `wp-audit.php` — live WordPress vs dashboard audit (reads antarctic-trips
+  directly from the main site DB, read-only; no CSV upload). Reads main DB creds
+  from the main site wp-config at runtime and the desk gate creds from the
+  server-only operator-config.php. Behind the gate, manual only.
+- `wp-price-audit.php` — WordPress vs dashboard per-cabin price audit (CSV-upload
+  fallback, kept alongside the live audit)
 - `upload-quark-cmd.php` — Quark Closed Market xlsx upload/parse
 - `upload-links.php`, `upload-quark-detail.php`, `upload-quark-links.php`,
   `upload-aurora-services.php`, `upload-aurora-links.php`,
