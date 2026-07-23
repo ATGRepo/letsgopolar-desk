@@ -659,14 +659,40 @@ function lgp_swan_tariffs_refresh_report($dir) {
 
     $new = json_decode(file_get_contents($file), true);
     if (!is_array($new)) $new = [];
+    // Departure date + itinerary lookup so each change row is identifiable.
+    // Prefer the LGP links sheet (itinerary_name / start_date); fall back to
+    // swan-cruises.json (name / dateStart) for ids not yet in the sheet.
+    $label = [];
+    $rows = lgp_swan_sheet_rows($dir);
+    foreach ($rows as $id => $r) {
+        $label[(string) $id] = [
+            'itinerary'  => trim($r['itinerary_name'] ?? ($r['destinations'] ?? '')),
+            'departure'  => trim($r['start_date'] ?? ''),
+        ];
+    }
+    $cruisesFile = rtrim($dir, '/') . '/swan-cruises.json';
+    if (is_readable($cruisesFile)) {
+        $cruises = json_decode(file_get_contents($cruisesFile), true);
+        if (is_array($cruises)) foreach ($cruises as $c) {
+            $cid = (string) ($c['id'] ?? '');
+            if ($cid === '') continue;
+            if (empty($label[$cid]['itinerary'])) $label[$cid]['itinerary'] = trim($c['name'] ?? '');
+            if (empty($label[$cid]['departure'])) $label[$cid]['departure'] = trim($c['dateStart'] ?? '');
+        }
+    }
+    $lbl = function ($id) use ($label) {
+        $l = $label[(string) $id] ?? [];
+        return ['itinerary' => $l['itinerary'] ?? '', 'departure' => $l['departure'] ?? ''];
+    };
+
     $oi = []; foreach ($old as $t) { if (isset($t['id'])) $oi[(string) $t['id']] = $t; }
     $ni = []; foreach ($new as $t) { if (isset($t['id'])) $ni[(string) $t['id']] = $t; }
     $removed = $added = $changes = [];
-    foreach ($oi as $id => $t) if (!isset($ni[$id])) $removed[] = ['id' => $id, 'old_from' => lgp_swan_std_price($t)];
+    foreach ($oi as $id => $t) if (!isset($ni[$id])) $removed[] = ['id' => $id, 'old_from' => lgp_swan_std_price($t)] + $lbl($id);
     foreach ($ni as $id => $t) {
-        if (!isset($oi[$id])) { $added[] = ['id' => $id, 'new_from' => lgp_swan_std_price($t)]; continue; }
+        if (!isset($oi[$id])) { $added[] = ['id' => $id, 'new_from' => lgp_swan_std_price($t)] + $lbl($id); continue; }
         $po = lgp_swan_std_price($oi[$id]); $pn = lgp_swan_std_price($t);
-        if ($po !== null && $pn !== null && $po != $pn) $changes[] = ['id' => $id, 'old_from' => $po, 'new_from' => $pn, 'delta' => $pn - $po];
+        if ($po !== null && $pn !== null && $po != $pn) $changes[] = ['id' => $id, 'old_from' => $po, 'new_from' => $pn, 'delta' => $pn - $po] + $lbl($id);
     }
     usort($changes, function ($a, $b) { return abs($b['delta']) <=> abs($a['delta']); });
 

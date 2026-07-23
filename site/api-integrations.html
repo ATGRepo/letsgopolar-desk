@@ -139,7 +139,6 @@
       </div>
       <div class="linksmeta" id="owLinksMeta"></div>
       <div class="actions">
-        <button class="btn" id="owCheck">Check live feed</button>
         <button class="btn ghost" id="owDownload" disabled>Download missing as CSV</button>
         <button class="btn ghost" id="owUploadBtn">Upload LGP Links CSV</button>
         <input type="file" id="owUploadInput" accept=".csv,text/csv" style="display:none">
@@ -318,7 +317,7 @@
   function lgpCollapsible(title, bodyHtml, open){ return '<div class="collapse'+(open?' open':'')+'"><div class="collapse-head"><span>'+title+'</span><span class="arrow">▾</span></div><div class="collapse-body">'+bodyHtml+'</div></div>'; }
   function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 
-  $("owCheck").addEventListener("click", async ()=>{
+  async function owRefresh(){
     $("owMsg").textContent="Loading live feed...";
     $("owTable").innerHTML="";
     $("owDownload").disabled=true;
@@ -366,7 +365,10 @@
       $("owPill").className="pill warn"; $("owPill").textContent="Error";
       $("owMsg").textContent="Could not load the feed. Make sure this page is served from the desk folder next to rate-data.php.";
     }
-  });
+  }
+
+  // Oceanwide rates come from a cached JSON feed, so we check automatically on load.
+  owRefresh();
 
   $("owUploadBtn").addEventListener("click", ()=> $("owUploadInput").click());
 
@@ -387,7 +389,7 @@
       $("owMsg").innerHTML = `<span style="color:#2f8b6f;font-weight:600">Saved ${esc(res.saved_as)} &mdash; ${res.rows} rows, ${res.with_links} with links.</span> Refreshing matches...`;
       // Force the proxy to rebuild with the new file, then re-check.
       await fetch(ENDPOINT + "?nocache=1", {cache:"no-store"});
-      $("owCheck").click();
+      owRefresh();
     }catch(err){
       $("owPill").className="pill warn"; $("owPill").textContent="Upload error";
       $("owMsg").textContent = "Could not upload. Make sure upload-links.php is in the desk folder next to rate-data.php.";
@@ -664,7 +666,10 @@
       const chip=(l,v)=>'<div class="stat"><b>'+esc(v==null?"-":v)+'</b><span>'+esc(l)+'</span></div>';
       let h='<div class="statrow">'+chip('Cruise ids',r.ids)+chip('Trips before',r.old_count)+chip('Trips now',r.new_count)+chip('Price changes',(r.price_changes||[]).length)+chip('Fetch failures',r.fetch_failures)+'</div>';
       h+='<p class="linksmeta">Previous pull '+esc(fmt(r.prev_pull))+' &rarr; this pull '+esc(fmt(r.this_pull))+(r.secs!=null?' &middot; '+esc(r.secs)+'s':'')+'</p>';
-      if((r.price_changes||[]).length){ h+=lgpCollapsible("Price changes ("+r.price_changes.length+")", tbl([{h:'Cruise id',f:x=>x.id},{h:'Was',f:x=>money(x.old_from)},{h:'Now',f:x=>money(x.new_from)},{h:'Change',f:x=>(x.delta>0?'+':'')+money(x.delta)}], r.price_changes), false); }
+      const idCols=[{h:'Cruise id',f:x=>x.id},{h:'Departure',f:x=>x.departure||"-"},{h:'Itinerary',f:x=>x.itinerary||"-"}];
+      if((r.price_changes||[]).length){ h+=lgpCollapsible("Price changes ("+r.price_changes.length+")", tbl(idCols.concat([{h:'Was',f:x=>money(x.old_from)},{h:'Now',f:x=>money(x.new_from)},{h:'Change',f:x=>(x.delta>0?'+':'')+money(x.delta)}]), r.price_changes), false); }
+      if((r.added||[]).length){ h+=lgpCollapsible("Added ("+r.added.length+")", tbl(idCols.concat([{h:'From',f:x=>money(x.new_from)}]), r.added), false); }
+      if((r.removed||[]).length){ h+=lgpCollapsible("Removed ("+r.removed.length+")", tbl(idCols.concat([{h:'Was from',f:x=>money(x.old_from)}]), r.removed), false); }
       box.innerHTML=h;
       renderNewTariffs(r.new_tariffs||[]);
     }
