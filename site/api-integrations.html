@@ -1005,7 +1005,8 @@
         if(r.ok===false){ $("wbMsg").textContent="Apply failed: "+esc(r.error||"unknown"); }
         else {
           const okN=(r.applied||[]).filter(x=>x.ok).length, failN=(r.applied||[]).length-okN;
-          $("wbMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Applied to '+okN+' trips.</span>'+(failN?(' '+failN+' failed.'):'')+' Backup saved server-side as <code>'+esc(r.backup_file||'')+'</code>. Re-previewing…';
+          const cache=(r.cache_purge&&r.cache_purge.purged)?' Website cache cleared.':'';
+          $("wbMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Applied to '+okN+' trips.</span>'+(failN?(' '+failN+' failed.'):'')+cache+' Backup saved server-side as <code>'+esc(r.backup_file||'')+'</code>. Re-previewing…';
           await fetch("rate-data.php?nocache=1",{cache:"no-store"}).catch(()=>{});
           $("wbPreview").click();
         }

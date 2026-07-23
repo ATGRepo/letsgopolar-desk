@@ -202,10 +202,14 @@ if ($action === 'apply' && !$dryrun && $backup) {
 }
 mysqli_close($db);
 
+// ---- purge the website page cache so new prices go public immediately ----
+$cachePurge = null;
+if ($action === 'apply' && !$dryrun && $applyResults) $cachePurge = wb_purge_wp_rocket_();
+
 $resp = ['ok' => true, 'action' => $action, 'dryrun' => $dryrun,
          'summary' => ['trips' => count($trips), 'cabin_changes' => $totalCabinChanges],
          'trips' => $trips];
-if ($action === 'apply' && !$dryrun) { $resp['applied'] = $applyResults; $resp['backup_file'] = $backupFile; }
+if ($action === 'apply' && !$dryrun) { $resp['applied'] = $applyResults; $resp['backup_file'] = $backupFile; $resp['cache_purge'] = $cachePurge; }
 out($resp);
 
 // ---------------- helpers ----------------
@@ -218,6 +222,30 @@ function wb_plain_($n) { return (string)(int)round($n); }
 function wb_slug_($u) { return preg_match('#/antarctic-trips/([^/]+)/?#', (string)$u, $m) ? $m[1] : ''; }
 function wb_lgp_($slug) { $slug = trim((string)$slug); return $slug === '' ? '' : ('https://letsgopolar.com/antarctic-trips/' . $slug . '/'); }
 function wb_self_base_() { $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'); $h = $_SERVER['HTTP_HOST'] ?? 'localhost'; $d = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/'); return ($https ? 'https' : 'http') . '://' . $h . $d; }
+function wb_rrmdir_($dir) {
+    if (!is_dir($dir)) return;
+    foreach (scandir($dir) as $f) {
+        if ($f === '.' || $f === '..') continue;
+        $p = $dir . '/' . $f;
+        if (is_dir($p) && !is_link($p)) wb_rrmdir_($p); else @unlink($p);
+    }
+    @rmdir($dir);
+}
+/** Clear the WP Rocket page cache for the site (same server filesystem). */
+function wb_purge_wp_rocket_() {
+    $base = dirname(MAIN_WPCONFIG) . '/wp-content/cache/wp-rocket';
+    $baseReal = realpath($base);
+    if ($baseReal === false || !is_dir($baseReal)) return ['purged' => false, 'reason' => 'no_wp_rocket_cache'];
+    $removed = 0;
+    foreach (scandir($baseReal) as $f) {
+        if ($f === '.' || $f === '..') continue;
+        $p = $baseReal . '/' . $f;
+        $pr = realpath($p);
+        if ($pr === false || strpos($pr, $baseReal . DIRECTORY_SEPARATOR) !== 0) continue; // stay inside the cache dir
+        wb_rrmdir_($pr); $removed++;
+    }
+    return ['purged' => true, 'removed_hosts' => $removed];
+}
 function wb_http_get_($url, $gate = null) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 120, CURLOPT_FOLLOWLOCATION => true, CURLOPT_SSL_VERIFYPEER => false]);
