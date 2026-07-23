@@ -591,7 +591,7 @@
         body+=tbl(cols, future);
         h+=lgpCollapsible("New operator_ids not in sheet ("+future.length+" upcoming)", body, false);
       }
-      if((r.stale_in_sheet||[]).length){ h+=lgpCollapsible("Sheet operator_ids no longer in catalogue ("+r.stale_in_sheet.length+")", '<p class="linksmeta">'+r.stale_in_sheet.map(esc).join(", ")+'</p>', false); }
+      if((r.stale_in_sheet||[]).length){ h+=lgpCollapsible("Sheet operator_ids no longer in catalogue ("+r.stale_in_sheet.length+")", tbl([{h:'Operator id',f:x=>x.operator_id},{h:'Itinerary',f:x=>x.name},{h:'Departure',f:x=>x.start_date}], r.stale_in_sheet), false); }
       box.innerHTML=h;
       const bf=$("auPkgDlFuture"); if(bf) bf.addEventListener("click", mkDl(future,"aurora-new-upcoming.csv"));
       const ba=$("auPkgDlAll"); if(ba) ba.addEventListener("click", mkDl(nw,"aurora-new-all.csv"));

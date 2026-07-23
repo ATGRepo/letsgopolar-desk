@@ -266,6 +266,26 @@ function lgp_aurora_oids($dir) {
     return array_keys($out);
 }
 
+/** aurora-lgp-links.csv keyed by operator_id, whole row as assoc (for enrichment). */
+function lgp_aurora_sheet_rows($dir) {
+    $p = rtrim($dir, '/') . '/aurora-lgp-links.csv';
+    $out = [];
+    if (!is_readable($p)) return $out;
+    $c = preg_replace('/^\xEF\xBB\xBF/', '', file_get_contents($p));
+    $c = str_replace(["\r\n", "\r"], "\n", $c);
+    $lines = explode("\n", $c);
+    $hdr = array_map('trim', str_getcsv(array_shift($lines)));
+    foreach ($lines as $l) {
+        if ($l === '') continue;
+        $cols = str_getcsv($l);
+        $row = [];
+        foreach ($hdr as $i => $h) $row[$h] = $cols[$i] ?? '';
+        $id = trim($row['operator_id'] ?? '');
+        if ($id !== '') $out[$id] = $row;
+    }
+    return $out;
+}
+
 /** Lowest GrossPrice across an Aurora service data object's ServicePricing. */
 function lgp_aurora_min_price($data) {
     $m = null;
@@ -423,8 +443,26 @@ function lgp_aurora_packages_report($dir) {
                       'active' => $p['IsActive'] ?? null, 'stop_sell' => $p['StopSell'] ?? null];
         }
     }
+    // Enrich stale sheet rows (in the sheet, gone from the catalogue) with
+    // itinerary name + departure date, from the pulled services then the sheet.
+    $rows = lgp_aurora_sheet_rows($dir);
+    $svc = [];
+    $svcFile = rtrim($dir, '/') . '/aurora-services.json';
+    if (is_readable($svcFile)) {
+        $sj = json_decode(file_get_contents($svcFile), true);
+        if (is_array($sj)) foreach ($sj as $e) { if (!empty($e['voyageCode'])) $svc[$e['voyageCode']] = $e['data'] ?? []; }
+    }
     $stale = [];
-    foreach (array_keys($sheet) as $oid) if (!isset($pkgNames[$oid])) $stale[] = $oid;
+    foreach (array_keys($sheet) as $oid) {
+        if (isset($pkgNames[$oid])) continue;
+        $d = $svc[$oid] ?? [];
+        $r = $rows[$oid] ?? [];
+        $stale[] = [
+            'operator_id' => $oid,
+            'name'        => $d['ExternalName'] ?? ($d['Name'] ?? ($r['destinations'] ?? '')),
+            'start_date'  => $d['StartDate'] ?? ($r['start_date'] ?? ''),
+        ];
+    }
 
     $report = ['ok' => true, 'operator' => 'aurora', 'mode' => 'packages', 'this_pull' => gmdate('c'),
                'total' => $diag['total'], 'written' => $diag['written'], 'pages' => $diag['pages'],
