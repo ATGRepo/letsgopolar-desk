@@ -12,6 +12,10 @@ All the PHP endpoints, the Apps Script, and the setup notes:
   directly from the main site DB, read-only; no CSV upload). Reads main DB creds
   from the main site wp-config at runtime and the desk gate creds from the
   server-only operator-config.php. Behind the gate, manual only.
+- `wp-writeback.php` — pushes feed prices back onto the website (writes to the
+  main site DB). Prices only, full struck through, sold-out cabins untouched,
+  $1 rounding skipped. Preview + apply-by-approved-ids, backs up each page to
+  desk/price-backups/ before writing. Behind the gate, manual only.
 - `wp-price-audit.php` — WordPress vs dashboard per-cabin price audit (CSV-upload
   fallback, kept alongside the live audit)
 - `upload-quark-cmd.php` — Quark Closed Market xlsx upload/parse

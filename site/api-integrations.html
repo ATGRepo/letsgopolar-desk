@@ -302,6 +302,31 @@
       <div id="laReport"></div>
     </div>
 
+    <div class="intg" id="wpwriteback">
+      <div class="intg-head">
+        <div class="intg-title">
+          <div>
+            <div class="op">Data write-back</div>
+            <h2>Push feed prices to the website</h2>
+          </div>
+        </div>
+        <span class="pill warn">Writes to live site</span>
+      </div>
+      <p class="desc">Writes the dashboard feed prices onto the website&rsquo;s trip pages. <b>Prices only</b>: full price is struck through, the net price is shown, and the three highlight cards and the price-range filter are kept in sync. Cabins the site marks <b>SOLD OUT are never touched</b>, cabins the feed has no price for are skipped, and $1 rounding differences are ignored. <b>Preview first</b> &mdash; nothing is written until you tick trips and press Apply. Every page is backed up before it changes.</p>
+      <div class="statrow">
+        <div class="stat"><b id="wbTrips">&ndash;</b><span>Trips with changes</span></div>
+        <div class="stat"><b id="wbCabins">&ndash;</b><span>Cabin price changes</span></div>
+        <div class="stat"><b id="wbSelected">0</b><span>Selected to apply</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="wbPreview">Preview changes</button>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="wbAll" disabled> Select all</label>
+        <button class="btn" id="wbApply" disabled>Apply selected to website</button>
+      </div>
+      <div class="msg" id="wbMsg"></div>
+      <div id="wbReport"></div>
+    </div>
+
     <div class="intg" id="wpaudit">
       <div class="intg-head">
         <div class="intg-title">
@@ -919,6 +944,73 @@
       if(!last) return;
       const blob=new Blob([buildCsv(last)],{type:"text/csv"});
       const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="wp-dashboard-audit.csv"; a.click(); URL.revokeObjectURL(a.href);
+    });
+  })();
+
+  /* ---------------- Price write-back (feed -> website) ---------------- */
+  (function(){
+    const esc = s => String(s==null?"":s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    let trips = [];
+    function refreshCount(){
+      const sel=[...document.querySelectorAll('.wb-pick:checked')].map(x=>+x.value);
+      $("wbSelected").textContent=sel.length;
+      $("wbApply").disabled = sel.length===0;
+      return sel;
+    }
+    function render(r){
+      const box=$("wbReport");
+      if(r.ok===false){ box.innerHTML='<p class="msg">Preview failed: '+esc(r.error||"unknown")+'</p>'; return; }
+      trips=r.trips||[];
+      $("wbTrips").textContent=r.summary.trips;
+      $("wbCabins").textContent=r.summary.cabin_changes;
+      if(!trips.length){ box.innerHTML='<p class="linksmeta">No price changes to write. The website matches the feed.</p>'; $("wbAll").disabled=true; return; }
+      $("wbAll").disabled=false;
+      let h='';
+      trips.forEach(t=>{
+        let body='<table class="miss"><tr><th>Cabin</th><th>Original (was &rarr; new)</th><th>Final (was &rarr; new)</th></tr>';
+        t.cabins.forEach(c=>{ body+='<tr><td>'+esc(c.cabin)+'</td><td>'+esc(c.cur_orig||'—')+' &rarr; <b>'+esc(c.new_orig||'—')+'</b></td><td>'+esc(c.cur_final||'—')+' &rarr; <b>'+esc(c.new_final)+'</b></td></tr>'; });
+        body+='</table>';
+        if(t.cards && t.cards.length) body+='<p class="linksmeta">Highlight cards: '+t.cards.map(c=>esc(c.name)+' '+esc(c.cur||'—')+'&rarr;'+esc(c.new)).join(' &middot; ')+'</p>';
+        if(t.filter) body+='<p class="linksmeta">Filter range '+esc(t.filter.cur_min||'—')+'..'+esc(t.filter.cur_max||'—')+' &rarr; <b>'+esc(t.filter.new_min)+'..'+esc(t.filter.new_max)+'</b></p>';
+        body+='<p class="linksmeta"><a href="'+esc(t.link)+'" target="_blank" rel="noopener">open page</a></p>';
+        const head='<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" class="wb-pick" value="'+t.id+'" checked> <span><b>'+esc(t.op)+'</b> &middot; '+esc(t.start)+' &middot; '+esc(t.trip)+' <span class="linksmeta">('+t.cabins.length+' cabin'+(t.cabins.length===1?'':'s')+')</span></span></label>';
+        h+='<div class="collapse"><div class="collapse-head">'+head+'<span class="arrow">▾</span></div><div class="collapse-body">'+body+'</div></div>';
+      });
+      box.innerHTML=h;
+      document.querySelectorAll('.wb-pick').forEach(x=>x.addEventListener('change', refreshCount));
+      // clicking the checkbox should not toggle the collapse
+      document.querySelectorAll('.wb-pick').forEach(x=>x.addEventListener('click', e=>e.stopPropagation()));
+      refreshCount();
+    }
+    $("wbPreview").addEventListener("click", async ()=>{
+      const b=$("wbPreview"),o=b.textContent; b.disabled=true; b.textContent="Reading website + feed…";
+      $("wbMsg").textContent="Building the preview from the live website and feed.";
+      try{
+        const r=await (await fetch("wp-writeback.php?action=preview",{cache:"no-store"})).json();
+        render(r);
+        $("wbMsg").innerHTML=r.ok===false?"Preview failed.":('<span style="color:#2f8b6f;font-weight:600">Preview ready.</span> '+r.summary.trips+' trips, '+r.summary.cabin_changes+' cabin price changes. Untick any you don’t want, then Apply.');
+      }catch(e){ $("wbMsg").textContent="Preview error: "+e.message; }
+      finally{ b.disabled=false; b.textContent=o; }
+    });
+    $("wbAll").addEventListener("change", ()=>{ document.querySelectorAll('.wb-pick').forEach(x=>x.checked=$("wbAll").checked); refreshCount(); });
+    $("wbApply").addEventListener("click", async ()=>{
+      const sel=refreshCount(); if(!sel.length) return;
+      const cabins=trips.filter(t=>sel.includes(t.id)).reduce((n,t)=>n+t.cabins.length,0);
+      if(!confirm("Write prices to "+sel.length+" live website trips ("+cabins+" cabin changes)?\n\nEach page is backed up first. This changes the public site.")) return;
+      const b=$("wbApply"),o=b.textContent; b.disabled=true; b.textContent="Writing…"; $("wbPreview").disabled=true;
+      $("wbMsg").textContent="Writing prices to the website and backing up each page.";
+      try{
+        const body="action=apply&ids="+encodeURIComponent(sel.join(","));
+        const r=await (await fetch("wp-writeback.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body,cache:"no-store"})).json();
+        if(r.ok===false){ $("wbMsg").textContent="Apply failed: "+esc(r.error||"unknown"); }
+        else {
+          const okN=(r.applied||[]).filter(x=>x.ok).length, failN=(r.applied||[]).length-okN;
+          $("wbMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Applied to '+okN+' trips.</span>'+(failN?(' '+failN+' failed.'):'')+' Backup saved server-side as <code>'+esc(r.backup_file||'')+'</code>. Re-previewing…';
+          await fetch("rate-data.php?nocache=1",{cache:"no-store"}).catch(()=>{});
+          $("wbPreview").click();
+        }
+      }catch(e){ $("wbMsg").textContent="Apply error: "+e.message; }
+      finally{ b.disabled=false; b.textContent=o; $("wbPreview").disabled=false; }
     });
   })();
   </script>
