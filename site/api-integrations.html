@@ -188,25 +188,44 @@
             <h2>Aurora Expeditions</h2>
           </div>
         </div>
-        <span class="pill" id="auPill">Awaiting files</span>
+        <span class="pill" id="auPill">Live API</span>
       </div>
-      <p class="desc">Aurora isn&rsquo;t connected to a live API yet. Upload the Aurora services JSON together with the Aurora &ldquo;LGP Links&rdquo; CSV. This processes cabin pricing (gross fare, promotional net fare, berth availability), matches each voyage to its LGP link by voyage code, and publishes the trips to Dates and Rates for the whole team. Hidden services are skipped; itinerary, destinations, season, and region come from the links sheet. Any visible voyage not in the links sheet is reported below.</p>
-      <div class="qk-uploads">
-        <label class="qk-file"><span class="qk-lab">Services JSON</span><span class="qk-hint" id="auSvcName">JSON &middot; not selected</span><input type="file" id="auSvcInput" accept=".json,application/json"></label>
-        <label class="qk-file"><span class="qk-lab">LGP Links (Aurora)</span><span class="qk-hint" id="auLinksName">CSV &middot; not selected</span><input type="file" id="auLinksInput" accept=".csv,text/csv"></label>
+      <p class="desc">Aurora rates now come <strong>live from Aurora&rsquo;s API</strong>. Two steps. <strong>Services</strong> pulls current rates for the operator_ids already in your LGP sheet (run often, e.g. weekly). <strong>Packages</strong> pulls the whole catalogue to find new operator_ids to add to the sheet (run rarely, e.g. each new season). The LGP Links CSV upload is at the bottom.</p>
+
+      <div class="qk-sub">
+        <h3 class="qk-subh">Services (rates)</h3>
+        <p class="desc">Pulls live rates for every operator_id in the Aurora LGP sheet and publishes them to Dates and Rates.</p>
+        <div class="actions">
+          <button class="btn" id="auSvcRefresh">Refresh Aurora rates (Services)</button>
+          <span class="linksmeta" id="auSvcStatus">Checking last pull&hellip;</span>
+        </div>
+        <div class="msg" id="auSvcMsg"></div>
+        <div id="auSvcReport"></div>
+        <div id="auMapping"></div>
       </div>
-      <div class="statrow">
-        <div class="stat"><b id="auTotal">&ndash;</b><span>Voyages (visible)</span></div>
-        <div class="stat"><b id="auMatched">&ndash;</b><span>Published to dashboard</span></div>
-        <div class="stat"><b id="auMissing">&ndash;</b><span>Not in links sheet</span></div>
+
+      <div class="qk-sub">
+        <h3 class="qk-subh">Packages (catalogue, per season)</h3>
+        <p class="desc">Pulls Aurora&rsquo;s full package catalogue and lists operator_ids not yet in your LGP sheet, so you can add new sailings. Heavy; run only when a new season launches.</p>
+        <div class="actions">
+          <button class="btn" id="auPkgRefresh">Refresh Aurora Packages</button>
+          <span class="linksmeta" id="auPkgStatus">Checking last pull&hellip;</span>
+        </div>
+        <div class="msg" id="auPkgMsg"></div>
+        <div id="auPkgReport"></div>
       </div>
-      <div class="linksmeta" id="auMeta"></div>
-      <div class="actions">
-        <button class="btn" id="auPublish" disabled>Publish to Dates and Rates</button>
-        <button class="btn ghost" id="auDownload" disabled>Download not-in-links report</button>
+
+      <div class="qk-sub">
+        <h3 class="qk-subh">LGP Links (Aurora)</h3>
+        <p class="desc">Maps each operator_id to its letsgopolar.com page. Export the Aurora &ldquo;LGP Links&rdquo; sheet as CSV and upload it here.</p>
+        <div class="qk-uploads">
+          <label class="qk-file"><span class="qk-lab">LGP Links (Aurora)</span><span class="qk-hint" id="auLinksName">CSV &middot; not selected</span><input type="file" id="auLinksInput" accept=".csv,text/csv"></label>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="auLinksUpload" disabled>Upload LGP Links CSV</button>
+        </div>
+        <div class="msg" id="auLinksMsg"></div>
       </div>
-      <div class="msg" id="auMsg"></div>
-      <div id="auTable"></div>
     </div>
 
     <div class="intg" id="swan">
@@ -507,155 +526,105 @@
       });
     })();
   })();
-  /* ---------------- Aurora publish (services JSON + links CSV -> server -> dashboard) ---------------- */
+  /* ---------------- Aurora (live API: Services rates + Packages catalogue) ---------------- */
   (function(){
-    let svcFile=null, linksFile=null;
-    const ready=()=>{ $("auPublish").disabled=!(svcFile&&linksFile); };
-
-    $("auSvcInput").addEventListener("change", e=>{
-      const f=e.target.files&&e.target.files[0]; if(!f) return;
-      svcFile=f; $("auSvcName").textContent="JSON \u00b7 "+f.name;
-      $("auSvcInput").closest(".qk-file").classList.add("ok"); ready();
-    });
-    $("auLinksInput").addEventListener("change", e=>{
-      const f=e.target.files&&e.target.files[0]; if(!f) return;
-      linksFile=f; $("auLinksName").textContent="CSV \u00b7 "+f.name;
-      $("auLinksInput").closest(".qk-file").classList.add("ok"); ready();
-    });
-
-    async function readText(file){
-      return new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.onerror=()=>rej(new Error("could not read file")); rd.readAsText(file); });
+    const fmt = iso => { if(!iso) return "never"; const d=new Date(iso); return isNaN(d)?iso:d.toLocaleString(undefined,{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+    const money = n => (n==null) ? "" : "$"+Number(n).toLocaleString();
+    function tbl(cols, rows){
+      let t='<table class="miss"><thead><tr>'+cols.map(c=>'<th>'+esc(c.h)+'</th>').join("")+'</tr></thead><tbody>';
+      rows.slice(0,100).forEach(x=>{ t+='<tr>'+cols.map(c=>'<td>'+esc(c.f(x))+'</td>').join("")+'</tr>'; });
+      t+='</tbody></table>';
+      if(rows.length>100) t+='<p class="linksmeta">Showing first 100 of '+rows.length+'.</p>';
+      return t;
     }
-    async function post(url, file, filename){
-      const fd=new FormData(); fd.append("file", file, filename||file.name||"upload");
-      const ctrl=new AbortController();
-      const timer=setTimeout(()=>ctrl.abort(), 30000);
-      let r;
-      try{
-        r=await fetch(url,{method:"POST",body:fd,cache:"no-store",signal:ctrl.signal});
-      }catch(e){
-        clearTimeout(timer);
-        if(e.name==="AbortError") throw new Error("timed out after 30s contacting "+url+" (is the endpoint deployed and reachable?)");
-        throw new Error("network error contacting "+url+" ("+(e.message||"failed")+")");
-      }
-      clearTimeout(timer);
-      if(r.status===404) throw new Error("endpoint not found (404): "+url+" — upload this PHP file to the desk folder.");
-      if(!r.ok) throw new Error("server returned HTTP "+r.status+" from "+url);
-      const text=await r.text();
-      try{ return JSON.parse(text); }
-      catch(e){ throw new Error("unexpected non-JSON response from "+url+" (first bytes: "+text.slice(0,60).replace(/\s+/g," ")+")"); }
+    // ----- Services -----
+    function renderSvcReport(r){
+      const box=$("auSvcReport"); if(!r){ box.innerHTML=""; return; }
+      if(r.ok===false){ box.innerHTML='<p class="msg">Refresh failed: '+esc((r.diag&&r.diag.errors&&r.diag.errors.join(", "))||"unknown error")+'</p>'; return; }
+      const chip=(l,v)=>'<div class="stat"><b>'+esc(v==null?"-":v)+'</b><span>'+esc(l)+'</span></div>';
+      let h='<div class="statrow">'+chip('Operator ids',r.oids)+chip('Services before',r.old_count)+chip('Services now',r.new_count)+chip('Price changes',(r.price_changes||[]).length)+chip('Fetch failures',r.fetch_failures)+'</div>';
+      h+='<p class="linksmeta">Previous pull '+esc(fmt(r.prev_pull))+' &rarr; this pull '+esc(fmt(r.this_pull))+(r.secs!=null?' &middot; '+esc(r.secs)+'s':'')+'</p>';
+      if((r.price_changes||[]).length){ h+=lgpCollapsible("Price changes ("+r.price_changes.length+")", tbl([{h:'Voyage',f:x=>x.voyage_code},{h:'Ship',f:x=>x.ship},{h:'Start',f:x=>x.start},{h:'Was',f:x=>money(x.old_from)},{h:'Now',f:x=>money(x.new_from)},{h:'Change',f:x=>(x.delta>0?'+':'')+money(x.delta)}], r.price_changes), false); }
+      box.innerHTML=h;
     }
-    // Keep only the fields merge_aurora reads, so the upload stays small regardless of export size.
-    function slimServices(text){
-      const full=JSON.parse(text);
-      const list=Array.isArray(full)?full:Object.values(full);
-      const slimmed=list.map(e=>{
-        const d=e.data||{};
-        return {
-          voyageCode:e.voyageCode,
-          data:{
-            hidden:d.hidden, ExternalName:d.ExternalName, Name:d.Name, Ship:d.Ship,
-            StartDate:d.StartDate, VoyageDay:d.VoyageDay, PackageNights:d.PackageNights,
-            Location_FullLocationName:d.Location_FullLocationName,
-            ServicePricing:(d.ServicePricing||[]).map(p=>({
-              PriceCategoryName:p.PriceCategoryName, GrossPrice:p.GrossPrice,
-              NetPrice:p.NetPrice, PromotionValue:p.PromotionValue })),
-            CabinInformation:(d.CabinInformation||[]).map(c=>({
-              CabinCategory:c.CabinCategory, UnitAvailable:c.UnitAvailable }))
-          }
-        };
-      });
-      return {count:list.length, blob:new Blob([JSON.stringify(slimmed)],{type:"application/json"})};
-    }
-
-    let auMissing=[];
-    $("auPublish").addEventListener("click", async ()=>{
-      if(!(svcFile&&linksFile)) return;
-      $("auMsg").textContent="Slimming the services file...";
-      $("auTable").innerHTML=""; $("auDownload").disabled=true;
+    async function renderMapping(){
+      const box=$("auMapping"); if(!box) return;
       try{
-        let svcBlob, svcCount=0;
-        try{
-          const t=await readText(svcFile);
-          const s=slimServices(t); svcBlob=s.blob; svcCount=s.count;
-          $("auMsg").textContent=`Services slimmed (${svcCount} services, ${(svcBlob.size/1024/1024).toFixed(2)} MB). Uploading...`;
-        }catch(e){
-          $("auMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Could not read/slim the services JSON:</span> ${esc(e.message||"parse error")}`;
-          return;
-        }
-        const up1=await post("/upload-aurora-links.php", linksFile);
-        if(!up1.ok){ $("auMsg").textContent="Links upload rejected: "+(up1.error||"error"); return; }
-        const up2=await post("/upload-aurora-services.php", svcBlob, "aurora-services.json");
-        if(!up2.ok){ $("auMsg").textContent="Services upload rejected: "+(up2.error||"error"); return; }
-
-        $("auMsg").textContent="Files saved. Building the dashboard feed...";
-        const r=await fetch(ENDPOINT+"?nocache=1",{cache:"no-store"});
-        const data=await r.json();
-        const diag=data.auroraDiag||{};
-        auMissing=Array.isArray(data.auroraMissing)?data.auroraMissing:[];
-        const total=diag.visible_count||0;
-        const matched=diag.mapped_count||0;
-        const miss=diag.missing_count!=null?diag.missing_count:auMissing.length;
-
-        $("auTotal").textContent=total;
-        $("auMatched").textContent=matched;
-        $("auMissing").textContent=miss;
-        $("auDownload").disabled=!auMissing.length;
-
-        if(diag.published){
-          const dt=new Date(diag.published);
-          const when=isNaN(dt)?diag.published:dt.toLocaleString();
-          $("auMeta").innerHTML=`Last published <b>${esc(when)}</b> &middot; ${matched} in dashboard &middot; ${diag.links_count||0} rows in links sheet`;
-        }
-
-        if(diag.error){
-          $("auMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Processed with an issue:</span> ${esc(diag.error)}.`;
-        } else {
-          $("auMsg").innerHTML=`<span style="color:#2f8b6f;font-weight:600">Published ${matched} Aurora voyages to Dates and Rates.</span> ${miss} were not found in the links sheet${miss?" (listed below)":""}.`;
-        }
-
-        if(auMissing.length){
-          const rows=auMissing.map(m=>`<tr>
-            <td>${esc(m.voyage_code)}</td>
-            <td>${esc(m.name)}</td>
-            <td>${esc(m.ship)}</td>
-            <td>${esc(m.start_date)}</td>
-          </tr>`).join("");
-          $("auTable").innerHTML=`<p class="msg">${auMissing.length} visible voyages have no row in the Aurora links sheet.</p>
-            <table class="miss"><thead><tr><th>Voyage code</th><th>Itinerary</th><th>Ship</th><th>Departs</th></tr></thead>
-            <tbody>${rows}</tbody></table>`;
-        }
-      }catch(err){
-        $("auMsg").innerHTML=`<span style="color:#b4552d;font-weight:600">Publish failed:</span> ${esc(err.message||"unknown error")}`;
-      }
-    });
-
-    // On load, surface last publish state if Aurora data is already live.
-    (async ()=>{
-      try{
-        const r=await fetch(ENDPOINT,{cache:"no-store"});
-        const data=await r.json();
-        const diag=data.auroraDiag||{};
-        if(diag.published){
-          const dt=new Date(diag.published);
-          const when=isNaN(dt)?diag.published:dt.toLocaleString();
-          $("auTotal").textContent=diag.visible_count||0;
-          $("auMatched").textContent=diag.mapped_count||0;
-          $("auMissing").textContent=diag.missing_count!=null?diag.missing_count:0;
-          $("auMeta").innerHTML=`Last published <b>${esc(when)}</b> &middot; ${diag.mapped_count||0} in dashboard &middot; ${diag.links_count||0} rows in links sheet`;
-        }
+        const data=await (await fetch("rate-data.php",{cache:"no-store"})).json();
+        const d=data.auroraDiag||{}; const missing=Array.isArray(data.auroraMissing)?data.auroraMissing:[];
+        const chip=(l,v)=>'<div class="stat"><b>'+esc(v==null?"-":v)+'</b><span>'+esc(l)+'</span></div>';
+        let h='<div class="statrow">'+chip('LGP link matched',d.mapped_count)+chip('Missing link',d.missing_count)+chip('Visible voyages',d.visible_count)+'</div>';
+        if(missing.length){
+          const dl='<div class="actions" style="margin:2px 0 8px"><button class="btn ghost" id="auMissDl">Download missing as CSV</button></div>';
+          h+=lgpCollapsible("Missing LGP links ("+missing.length+")", dl+tbl([{h:'Voyage',f:x=>x.voyage_code},{h:'Name',f:x=>x.name},{h:'Ship',f:x=>x.ship},{h:'Start',f:x=>x.start_date}], missing), false);
+        } else if(d.mapped_count!=null){ h+='<p class="linksmeta" style="color:#2f8b6f">All '+esc(d.mapped_count)+' visible voyages have an LGP link.</p>'; }
+        box.innerHTML=h;
+        const b=$("auMissDl"); if(b) b.addEventListener("click",()=>{ const q=s=>{const v=String(s==null?"":s);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}; const head=["operator_id","lgp_links","name","ship","start_date"]; const lines=[head.join(",")]; missing.forEach(m=>lines.push([q(m.voyage_code),q(""),q(m.name),q(m.ship),q(m.start_date)].join(","))); const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="aurora-missing-lgp-links.csv";a.click();URL.revokeObjectURL(a.href); });
       }catch(e){}
-    })();
-
-    $("auDownload").addEventListener("click", ()=>{
-      if(!auMissing.length) return;
-      const cols=["operator_id","operator_links","lgp_links","start_date","end_date","days","destinations","season","region"];
-      const q=s=>{const v=String(s==null?"":s);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-      const lines=[cols.join(",")];
-      auMissing.forEach(m=>lines.push([q(m.voyage_code),q(""),q(""),q(m.start_date),q(""),q(""),q(""),q(""),q("")].join(",")));
-      const blob=new Blob([lines.join("\n")],{type:"text/csv"});
-      const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="aurora-not-in-links.csv";a.click();URL.revokeObjectURL(a.href);
+    }
+    $("auSvcRefresh").addEventListener("click", async ()=>{
+      const btn=$("auSvcRefresh"),o=btn.textContent; btn.disabled=true; btn.textContent="Pulling rates, about 40s…";
+      $("auSvcMsg").textContent="Pulling Aurora rates for every operator_id in the sheet. Please wait.";
+      try{
+        const rep=await (await fetch("refresh.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"op=aurora&action=services",cache:"no-store"})).json();
+        renderSvcReport(rep);
+        if(rep.ok===false){ $("auSvcMsg").textContent="Refresh failed. See details above."; }
+        else { $("auSvcMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Done. '+esc(rep.new_count)+' services pulled in '+esc(rep.secs||"?")+'s.</span>'; $("auSvcStatus").textContent="Last rates pull: "+fmt(rep.this_pull); try{ await fetch("rate-data.php?nocache=1",{cache:"no-store"}); }catch(_){} renderMapping(); }
+      }catch(e){ $("auSvcMsg").textContent="Refresh error: "+e.message; }
+      finally{ btn.disabled=false; btn.textContent=o; }
     });
+    // ----- Packages -----
+    function renderPkgReport(r){
+      const box=$("auPkgReport"); if(!r){ box.innerHTML=""; return; }
+      if(r.ok===false){ box.innerHTML='<p class="msg">Packages refresh failed: '+esc((r.diag&&r.diag.errors&&r.diag.errors.join(", "))||"unknown error")+'</p>'; return; }
+      const chip=(l,v)=>'<div class="stat"><b>'+esc(v==null?"-":v)+'</b><span>'+esc(l)+'</span></div>';
+      let h='<div class="statrow">'+chip('Catalogue total',r.total)+chip('In your sheet',r.in_sheet)+chip('Not in sheet',r.new_count)+chip('Stale in sheet',(r.stale_in_sheet||[]).length)+'</div>';
+      h+='<p class="linksmeta">Pulled '+esc(fmt(r.this_pull))+(r.secs!=null?' &middot; '+esc(r.secs)+'s':'')+' &middot; '+esc(r.written)+' packages</p>';
+      const nw=r.new||[];
+      const today=new Date().toISOString().slice(0,10);
+      const future=nw.filter(x=> !x.travel_date || x.travel_date>=today);
+      const mkDl=(rows,name)=>()=>{ const q=s=>{const v=String(s==null?"":s);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}; const head=["operator_id","lgp_links","name","travel_date","length","region"]; const lines=[head.join(",")]; rows.forEach(x=>lines.push([q(x.operator_id),q(""),q(x.name),q(x.travel_date),q(x.length),q(x.region)].join(","))); const blob=new Blob([lines.join("\n")],{type:"text/csv"}); const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href); };
+      if(nw.length){
+        const cols=[{h:'Operator id',f:x=>x.operator_id},{h:'Name',f:x=>x.name},{h:'Travel date',f:x=>x.travel_date},{h:'Len',f:x=>x.length},{h:'Region',f:x=>x.region}];
+        let body='<div class="actions" style="margin:2px 0 8px"><button class="btn ghost" id="auPkgDlFuture">Download upcoming ('+future.length+')</button><button class="btn ghost" id="auPkgDlAll">Download all ('+nw.length+')</button></div>';
+        body+='<p class="linksmeta">Showing upcoming only. '+(nw.length-future.length)+' past or other are hidden but included in "Download all".</p>';
+        body+=tbl(cols, future);
+        h+=lgpCollapsible("New operator_ids not in sheet ("+future.length+" upcoming)", body, false);
+      }
+      if((r.stale_in_sheet||[]).length){ h+=lgpCollapsible("Sheet operator_ids no longer in catalogue ("+r.stale_in_sheet.length+")", '<p class="linksmeta">'+r.stale_in_sheet.map(esc).join(", ")+'</p>', false); }
+      box.innerHTML=h;
+      const bf=$("auPkgDlFuture"); if(bf) bf.addEventListener("click", mkDl(future,"aurora-new-upcoming.csv"));
+      const ba=$("auPkgDlAll"); if(ba) ba.addEventListener("click", mkDl(nw,"aurora-new-all.csv"));
+    }
+    $("auPkgRefresh").addEventListener("click", async ()=>{
+      const btn=$("auPkgRefresh"),o=btn.textContent; btn.disabled=true; btn.textContent="Pulling catalogue, about 30s…";
+      $("auPkgMsg").textContent="Pulling Aurora's full package catalogue. Please wait.";
+      try{
+        const rep=await (await fetch("refresh.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"op=aurora&action=packages",cache:"no-store"})).json();
+        renderPkgReport(rep);
+        if(rep.ok===false){ $("auPkgMsg").textContent="Refresh failed. See details above."; }
+        else { $("auPkgMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Done. '+esc(rep.total)+' packages, '+esc(rep.new_count)+' not in sheet.</span>'; $("auPkgStatus").textContent="Last catalogue pull: "+fmt(rep.this_pull); }
+      }catch(e){ $("auPkgMsg").textContent="Refresh error: "+e.message; }
+      finally{ btn.disabled=false; btn.textContent=o; }
+    });
+    // ----- LGP Links upload -----
+    (function(){
+      let file=null;
+      $("auLinksInput").addEventListener("change", e=>{ file=(e.target.files&&e.target.files[0])||null; $("auLinksName").textContent=file?("CSV · "+file.name):"CSV · not selected"; $("auLinksUpload").disabled=!file; });
+      $("auLinksUpload").addEventListener("click", async ()=>{ if(!file)return; $("auLinksMsg").textContent="Uploading links CSV…"; try{ const fd=new FormData(); fd.append("file",file,file.name); const r=await fetch("upload-aurora-links.php",{method:"POST",body:fd,cache:"no-store"}); const j=await r.json().catch(()=>({})); if(r.ok&&j.ok!==false){ $("auLinksMsg").innerHTML='<span style="color:#2f8b6f;font-weight:600">Links uploaded.</span> Run a Services refresh to re-match.'; } else { $("auLinksMsg").textContent="Upload rejected: "+(j.error||("HTTP "+r.status)); } }catch(e){ $("auLinksMsg").textContent="Upload error: "+e.message; } });
+    })();
+    // ----- On load -----
+    (async function(){
+      try{
+        const s=await (await fetch("refresh.php?op=aurora",{cache:"no-store"})).json();
+        $("auSvcStatus").textContent="Last rates pull: "+fmt(s.services&&s.services.last_pull);
+        if(s.services&&s.services.report) renderSvcReport(s.services.report);
+        $("auPkgStatus").textContent="Last catalogue pull: "+fmt(s.packages&&s.packages.last_pull);
+        if(s.packages&&s.packages.report) renderPkgReport(s.packages.report);
+        $("auPill").className="pill"; $("auPill").textContent="Live API";
+      }catch(e){ $("auSvcStatus").textContent="Could not read status."; }
+      renderMapping();
+    })();
   })();
   /* ---------------- Swan publish (zip of per-trip JSON + links CSV -> server -> dashboard + closed market) ---------------- */
   (function(){
